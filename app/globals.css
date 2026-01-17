@@ -1,26 +1,285 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* Color Palette - Light Mode */
+  --color-background: #f7f9fb;
+  --color-foreground: #0d1829;
+  
+  --color-card: #ffffff;
+  --color-card-foreground: #0d1829;
+  
+  --color-popover: #ffffff;
+  --color-popover-foreground: #0d1829;
+  
+  /* Deep navy primary */
+  --color-primary: #1a3a5c;
+  --color-primary-foreground: #f5f7fa;
+  
+  /* Light blue-gray secondary */
+  --color-secondary: #eff2f6;
+  --color-secondary-foreground: #0d1829;
+  
+  --color-muted: #eff2f6;
+  --color-muted-foreground: #64748b;
+  
+  /* Teal accent for CTAs */
+  --color-accent: #14b8a6;
+  --color-accent-foreground: #ffffff;
+  
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #f5f7fa;
+  
+  --color-border: #e5e9ee;
+  --color-input: #e5e9ee;
+  --color-ring: #14b8a6;
+  
+  /* Custom colors for the landing page */
+  --color-hero-gradient-start: #1a3a5c;
+  --color-hero-gradient-end: #2d5380;
+  --color-section-alt: #f4f6f9;
+  --color-success: #10b981;
+  --color-feature-icon-bg: #e6f9f7;
+  --color-feature-icon-color: #0f766e;
+  
+  /* Sidebar colors */
+  --color-sidebar-background: #fafafa;
+  --color-sidebar-foreground: #404040;
+  --color-sidebar-primary: #171717;
+  --color-sidebar-primary-foreground: #fafafa;
+  --color-sidebar-accent: #f5f5f5;
+  --color-sidebar-accent-foreground: #171717;
+  --color-sidebar-border: #e5e7eb;
+  --color-sidebar-ring: #3b82f6;
+  
+  /* Border Radius */
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --shadow-card: 0 4px 24px -4px rgb(0 0 0 / 0.08);
+  --shadow-card-hover: 0 12px 32px -4px rgb(0 0 0 / 0.12);
+  
+  /* Font Family */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+/* Dark Mode - Outside @theme block */
+/* @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --color-background: #0f1623;
+    --color-foreground: #f5f7fa;
+    
+    --color-card: #161d2c;
+    --color-card-foreground: #f5f7fa;
+    
+    --color-popover: #161d2c;
+    --color-popover-foreground: #f5f7fa;
+    
+    --color-primary: #2dd4bf;
+    --color-primary-foreground: #0f1623;
+    
+    --color-secondary: #1e2838;
+    --color-secondary-foreground: #f5f7fa;
+    
+    --color-muted: #1e2838;
+    --color-muted-foreground: #94a3b8;
+    
+    --color-accent: #22d3ee;
+    --color-accent-foreground: #0f1623;
+    
+    --color-destructive: #7f1d1d;
+    --color-destructive-foreground: #f5f7fa;
+    
+    --color-border: #1e2838;
+    --color-input: #1e2838;
+    --color-ring: #2dd4bf;
+    
+    --color-hero-gradient-start: #1a2a3d;
+    --color-hero-gradient-end: #2d4256;
+    --color-section-alt: #131a26;
+    --color-feature-icon-bg: #0a3330;
+    --color-feature-icon-color: #5eead4;
+    
+    --color-sidebar-background: #171717;
+    --color-sidebar-foreground: #f5f5f5;
+    --color-sidebar-primary: #3b82f6;
+    --color-sidebar-primary-foreground: #ffffff;
+    --color-sidebar-accent: #262626;
+    --color-sidebar-accent-foreground: #f5f5f5;
+    --color-sidebar-border: #262626;
+    --color-sidebar-ring: #3b82f6;
   }
+} */
+
+/* Base Styles */
+* {
+  border-color: var(--color-border);
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Utility Classes */
+.text-balance {
+  text-wrap: balance;
+}
+
+.hero-gradient {
+  background: linear-gradient(135deg, var(--color-hero-gradient-start) 0%, var(--color-hero-gradient-end) 100%);
+}
+
+.section-alt {
+  background-color: var(--color-section-alt);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.pricing-card-popular {
+  position: relative;
+  border: 2px solid var(--color-accent);
+  box-shadow: 0 0 40px -10px color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+
+.pricing-card-popular::before {
+  content: 'Populaire';
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-accent);
+  color: white;
+  padding: 4px 16px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Animation keyframes */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px -5px color-mix(in srgb, var(--color-accent) 40%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 30px -5px color-mix(in srgb, var(--color-accent) 60%, transparent);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.6s ease-out forwards;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out forwards;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Staggered animations */
+.stagger-1 { animation-delay: 0.1s; }
+.stagger-2 { animation-delay: 0.2s; }
+.stagger-3 { animation-delay: 0.3s; }
+.stagger-4 { animation-delay: 0.4s; }
+
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #888;
 }
