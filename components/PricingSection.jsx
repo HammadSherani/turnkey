@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Check, Users } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 const plans = [
   {
@@ -38,10 +39,11 @@ const plans = [
 ];
 
 const PricingSection = () => {
+  const router = useRouter();
 
   const handlePlanSelect = (planId) => {
-    alert(`Selected plan: ${planId}`);
-    // navigate(`/auth?plan=${planId}`);
+    // alert(`Selected plan: ${planId}`);
+    router.push(`/auth?plan=${planId}`);
   };
   return (
     <section id="tarifs" className="py-20 lg:py-28 section-alt">
