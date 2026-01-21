@@ -30,7 +30,6 @@ const validateEmail = (email) => {
     return { isValid: false, error: "Format d'email invalide" };
   }
   
-  // Check for common typos in popular domains
   const commonTypos = {
     "gmial.com": "gmail.com",
     "gmal.com": "gmail.com",
