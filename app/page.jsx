@@ -16,6 +16,7 @@ const HomePage = () => {
         <HeroSection />
         <BenefitsSection id="avantages" /> 
         <HowItWorksSection id="fonctionnement" />
+        
         <PricingSection id="tarifs" />
       </main>
       <Footer />
