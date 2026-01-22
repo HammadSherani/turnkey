@@ -8,16 +8,19 @@ const DEFAULT_LIMITS = {
   pro: { extractionsPerMonth: 2500, maxFilters: 5, maxFieldsPerFilter: 5 },
   prime: { extractionsPerMonth: 10000, maxFilters: 10, maxFieldsPerFilter: 10 },
 };
+
 const PLAN_NAMES = {
   starter: "Starter",
   pro: "Pro",
   prime: "Prime",
 };
+
 const PLAN_PRICES = {
   starter: 20,
   pro: 40,
   prime: 70,
 };
+
 const NEXT_PLAN = {
   starter: "pro",
   pro: "prime",
@@ -29,31 +32,45 @@ export function useSubscriptionQuotas() {
   const [error, setError] = useState(null);
   const [subscriptionData, setSubscriptionData] = useState(null);
   const [savedFilters, setSavedFilters] = useState([]);
-  // Fetch subscription status
+
+  // --- Helper to get headers with Token ---
+  const getAuthHeaders = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) alert("No access token found");
+    return {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    };
+  };
+
+  // 1. Fetch subscription status (Updated with Headers)
+  // 1. Fetch subscription status (CLEANED UP)
   const fetchSubscription = useCallback(async () => {
     try {
       setError(null);
+
+      // The SDK automatically grabs the session token and adds it to the headers.
+      // Do NOT pass a second argument unless it's the 'body' of your POST request.
       const { data, error: fnError } = await supabase.functions.invoke("check-subscription");
-     
+
       if (fnError) {
-        console.error("Error fetching subscription:", fnError);
-        setError("Impossible de vérifier l'abonnement");
+        // If fnError.status is 401, the user is likely not logged in
+        console.error("Function Error:", fnError);
+        setError("Session expirée ou non autorisée");
         return;
       }
-      if (data.error) {
-        console.error("Subscription error:", data.error);
-        setError(data.error);
-        return;
-      }
+
       setSubscriptionData(data);
     } catch (err) {
-      console.error("Subscription fetch error:", err);
+      console.error("Connection Error:", err);
       setError("Erreur de connexion");
     } finally {
       setIsLoading(false);
     }
   }, []);
-  // Fetch saved filters from database
+
+  // 2. Fetch saved filters from database
   const fetchSavedFilters = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -63,6 +80,7 @@ export function useSubscriptionQuotas() {
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
+
       if (error) {
         console.error("Error fetching filters:", error);
         return;
@@ -84,16 +102,17 @@ export function useSubscriptionQuotas() {
       console.error("Filter fetch error:", err);
     }
   }, []);
+
   // Initial fetch and periodic refresh
   useEffect(() => {
     fetchSubscription();
-    fetchSavedFilters();
-    // Refresh every 60 seconds
+    // fetchSavedFilters();
     const interval = setInterval(() => {
       fetchSubscription();
     }, 60000);
     return () => clearInterval(interval);
   }, [fetchSubscription, fetchSavedFilters]);
+
   // Derived values
   const plan = subscriptionData?.plan || null;
   const isSubscribed = subscriptionData?.subscribed || false;
@@ -106,37 +125,37 @@ export function useSubscriptionQuotas() {
   const nextPlan = plan ? NEXT_PLAN[plan] : "starter";
   const nextPlanName = nextPlan ? PLAN_NAMES[nextPlan] : null;
   const nextPlanPrice = nextPlan ? PLAN_PRICES[nextPlan] : null;
-  // Extraction limits (monthly only)
+
   const canExtract = isSubscribed && extractionsUsedThisMonth < limits.extractionsPerMonth;
   const isMonthlyLimitReached = extractionsUsedThisMonth >= limits.extractionsPerMonth;
   const extractionsRemainingThisMonth = Math.max(0, limits.extractionsPerMonth - extractionsUsedThisMonth);
   const monthlyUsagePercent = Math.min(100, (extractionsUsedThisMonth / limits.extractionsPerMonth) * 100);
-  // Filter limits
+
   const canSaveFilter = isSubscribed && savedFiltersCount < limits.maxFilters;
   const filtersRemaining = Math.max(0, limits.maxFilters - savedFiltersCount);
   const filtersUsagePercent = (savedFiltersCount / limits.maxFilters) * 100;
-  // Field limits (per filter)
+
   const canAddField = (currentFieldsCount) => currentFieldsCount < limits.maxFieldsPerFilter;
-  const fieldsRemaining = (currentFieldsCount) =>
-    Math.max(0, limits.maxFieldsPerFilter - currentFieldsCount);
-  // Consume extraction via backend
+  const fieldsRemaining = (currentFieldsCount) => Math.max(0, limits.maxFieldsPerFilter - currentFieldsCount);
+
+  // 3. Consume extraction via backend (Updated with Headers)
   const consumeExtraction = useCallback(async () => {
     try {
-      const { data, error: fnError } = await supabase.functions.invoke("consume-extraction");
-     
+      const headers = await getAuthHeaders();
+      const { data, error: fnError } = await supabase.functions.invoke("consume-extraction", headers);
+
       if (fnError) {
         return { success: false, error: fnError.message };
       }
       if (!data.success) {
         return { success: false, error: data.error };
       }
-      // Update local state
+
       setSubscriptionData(prev => prev ? {
         ...prev,
         usage: {
           ...prev.usage,
           extractionsUsedThisMonth: data.usage.extractionsUsedThisMonth,
-          savedFiltersCount: prev.usage?.savedFiltersCount || 0,
         }
       } : null);
       return { success: true };
@@ -144,7 +163,8 @@ export function useSubscriptionQuotas() {
       return { success: false, error: err.message };
     }
   }, []);
-  // Save filter to database
+
+  // 4. Save filter to database
   const saveFilter = useCallback(async (name, data) => {
     if (!canSaveFilter) return false;
     try {
@@ -168,7 +188,6 @@ export function useSubscriptionQuotas() {
         console.error("Error saving filter:", error);
         return false;
       }
-      // Update local state
       setSavedFilters(prev => [{
         id: newFilter.id,
         name: newFilter.name,
@@ -181,7 +200,8 @@ export function useSubscriptionQuotas() {
       return false;
     }
   }, [canSaveFilter]);
-  // Delete filter from database
+
+  // 5. Delete filter from database
   const deleteFilter = useCallback(async (filterId) => {
     try {
       const { error } = await supabase
@@ -199,11 +219,13 @@ export function useSubscriptionQuotas() {
       return false;
     }
   }, []);
-  // Open customer portal for subscription management
+
+  // 6. Open customer portal (Updated with Headers)
   const openCustomerPortal = useCallback(async () => {
     try {
-      const { data, error: fnError } = await supabase.functions.invoke("customer-portal");
-     
+      const headers = await getAuthHeaders();
+      const { data, error: fnError } = await supabase.functions.invoke("customer-portal", headers);
+
       if (fnError) {
         return { success: false, error: fnError.message };
       }
@@ -219,23 +241,16 @@ export function useSubscriptionQuotas() {
       return { success: false, error: err.message };
     }
   }, []);
-  // Get limit reached message
+
+  // Message helpers
   const getExtractionBlockedMessage = () => {
-    if (!isSubscribed) {
-      return "Vous n'avez pas d'abonnement actif.";
-    }
-    if (isMonthlyLimitReached) {
-      return "Vous avez atteint votre quota mensuel d'extractions.";
-    }
+    if (!isSubscribed) return "Vous n'avez pas d'abonnement actif.";
+    if (isMonthlyLimitReached) return "Vous avez atteint votre quota mensuel d'extractions.";
     return null;
   };
   const getFilterBlockedMessage = () => {
-    if (!isSubscribed) {
-      return "Vous n'avez pas d'abonnement actif.";
-    }
-    if (!canSaveFilter) {
-      return "Limite de filtres atteinte pour votre abonnement.";
-    }
+    if (!isSubscribed) return "Vous n'avez pas d'abonnement actif.";
+    if (!canSaveFilter) return "Limite de filtres atteinte pour votre abonnement.";
     return null;
   };
   const getFieldBlockedMessage = (currentFieldsCount) => {
@@ -244,12 +259,10 @@ export function useSubscriptionQuotas() {
     }
     return null;
   };
+
   return {
-    // Loading state
     isLoading,
     error,
-   
-    // Subscription info
     isSubscribed,
     plan,
     planName,
@@ -259,29 +272,24 @@ export function useSubscriptionQuotas() {
     nextPlanPrice,
     limits,
     subscriptionEnd,
-    // Extraction quotas (monthly only)
     extractionsUsedThisMonth,
     extractionsRemainingThisMonth,
     monthlyUsagePercent,
     canExtract,
     isMonthlyLimitReached,
-    // Filter quotas
     savedFiltersCount,
     savedFilters,
     canSaveFilter,
     filtersRemaining,
     filtersUsagePercent,
-    // Field quotas
     maxFieldsPerFilter: limits.maxFieldsPerFilter,
     canAddField,
     fieldsRemaining,
-    // Actions
     consumeExtraction,
     saveFilter,
     deleteFilter,
     openCustomerPortal,
     refreshSubscription: fetchSubscription,
-    // Messages
     getExtractionBlockedMessage,
     getFilterBlockedMessage,
     getFieldBlockedMessage,

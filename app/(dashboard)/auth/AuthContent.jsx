@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { signIn, useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Check, Users, ArrowLeft, Loader2, Eye, EyeOff, X } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { Check, Users, ArrowLeft, Loader2, Eye, EyeOff, X, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
-// Password validation rules
+// Validation Rules
 const passwordRules = [
   { id: "length", label: "Au moins 8 caractères", test: (p) => p.length >= 8 },
   { id: "uppercase", label: "Une lettre majuscule", test: (p) => /[A-Z]/.test(p) },
@@ -21,271 +22,234 @@ const passwordRules = [
 
 const isPasswordStrong = (password) => passwordRules.every(rule => rule.test(password));
 
-// Email validation
 const validateEmail = (email) => {
-  if (!email) return { isValid: false };
-  
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    return { isValid: false, error: "Format d'email invalide" };
-  }
-  
-  const commonTypos = {
-    "gmial.com": "gmail.com",
-    "gmal.com": "gmail.com",
-    "gmil.com": "gmail.com",
-    "gmail.fr": "gmail.com",
-    "hotmal.com": "hotmail.com",
-    "hotmial.com": "hotmail.com",
-    "outloo.com": "outlook.com",
-    "outlok.com": "outlook.com",
-    "yaho.com": "yahoo.com",
-    "yahooo.com": "yahoo.com",
-  };
-  
-  const domain = email.split("@")[1]?.toLowerCase();
-  if (domain && commonTypos[domain]) {
-    return { isValid: false, error: `Vouliez-vous dire @${commonTypos[domain]} ?` };
-  }
-  
-  // Check minimum domain requirements
-  const domainParts = domain?.split(".");
-  if (!domainParts || domainParts.length < 2 || domainParts.some(p => p.length < 2)) {
-    return { isValid: false, error: "Le domaine de l'email semble invalide" };
-  }
-  
+  if (!emailRegex.test(email)) return { isValid: false, error: "Format d'email invalide" };
   return { isValid: true };
 };
 
 const plans = [
-  {
-    id: "starter",
-    name: "Starter",
-    price: "20",
-    features: [
-      "500 extractions / mois",
-      "2 filtres sauvegardés",
-      "2 champs de données par filtre",
-    ],
-    popular: false,
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    price: "40",
-    features: [
-      "2 500 extractions / mois",
-      "5 filtres sauvegardés",
-      "5 champs de données par filtre",
-    ],
-    popular: true,
-  },
-  {
-    id: "prime",
-    name: "Prime",
-    price: "70",
-    features: [
-      "10 000 extractions / mois",
-      "10 filtres sauvegardés",
-      "10 champs de données par filtre",
-    ],
-    popular: false,
-  },
+  { id: "starter", name: "Starter", price: "20", features: ["500 extractions / mois", "2 filtres sauvegardés", "2 champs de données par filtre"] },
+  { id: "pro", name: "Pro", price: "40", popular: true, features: ["2 500 extractions / mois", "5 filtres sauvegardés", "5 champs de données par filtre"] },
+  { id: "prime", name: "Prime", price: "70", features: ["10 000 extractions / mois", "10 filtres sauvegardés", "10 champs de données par filtre"] },
 ];
 
-// Separate component that uses useSearchParams
-function AuthContent() {
+export default function AuthPage() {
+  const { data: session, status } = useSession();
   const searchParams = useSearchParams();
-  const planFromUrl = searchParams?.get("plan");
-  const modeFromUrl = searchParams?.get("mode");
-  
-  const [selectedPlan, setSelectedPlan] = useState(
-    modeFromUrl === "login" ? "login" : planFromUrl
-  );
-  const [email, setEmail] = useState("");
-  const [emailError, setEmailError] = useState(null);
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
-  // Validate email on change
+  // State management
+  const [currentView, setCurrentView] = useState("planSelection"); // planSelection, login, register
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [emailError, setEmailError] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [stripeError, setStripeError] = useState(null);
+
+  // Redirect logic handle
+  useEffect(() => {
+    // Check URL params for mode
+    const mode = searchParams?.get("mode");
+    const plan = searchParams?.get("plan");
+    
+    if (mode === "login") {
+      setCurrentView("login");
+    } else if (plan && ["starter", "pro", "prime"].includes(plan)) {
+      setSelectedPlan(plan);
+      setCurrentView("register");
+    }
+    
+    // Check for NextAuth Errors (like Google Auth Fail)
+    const error = searchParams?.get("error");
+    if (error === "OAuthSignin") {
+      setCurrentView("login");
+      toast({ title: "Auth Error", description: "Google connection failed. Check your settings.", variant: "destructive" });
+    }
+  }, [searchParams, toast]);
+
   const handleEmailChange = (value) => {
     setEmail(value);
-    if (value) {
-      const validation = validateEmail(value);
-      setEmailError(validation.error || null);
-    } else {
-      setEmailError(null);
-    }
+    setEmailError(validateEmail(value).error || null);
   };
 
-  useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        router.push("/dashboard");
-      }
-    };
-    checkSession();
-  }, [router]);
-
-  const handleProceedToPayment = async (e) => {
-    e.preventDefault();
-    
-    // Validate email
-    const emailValidation = validateEmail(email);
-    if (!emailValidation.isValid) {
-      toast({
-        title: "Email invalide",
-        description: emailValidation.error || "Veuillez entrer une adresse email valide",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      toast({
-        title: "Erreur",
-        description: "Les mots de passe ne correspondent pas",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!isPasswordStrong(password)) {
-      toast({
-        title: "Mot de passe trop faible",
-        description: "Veuillez respecter tous les critères de sécurité",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
-      // Store credentials temporarily for after payment
-      sessionStorage.setItem("pendingSignup", JSON.stringify({
-        email,
-        password,
-        planId: selectedPlan,
-      }));
-
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { planId: selectedPlan, email },
-      });
-
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
-
-      // Open Stripe Checkout
-      window.open(data.url, "_blank");
-      setIsLoading(false);
-      
-      toast({
-        title: "Paiement en cours",
-        description: "Complétez le paiement dans l'onglet Stripe pour finaliser votre inscription",
-      });
-    } catch (err) {
-      console.error("Checkout error:", err);
-      toast({
-        title: "Erreur",
-        description: err.message || "Erreur lors de la création du paiement",
-        variant: "destructive",
-      });
-      setIsLoading(false);
-    }
-  };
-
+  // Login Logic
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
+    const res = await signIn("credentials", { email, password, redirect: false });
     setIsLoading(false);
 
-    if (error) {
-      toast({
-        title: "Erreur de connexion",
-        description: error.message,
-        variant: "destructive",
-      });
+    if (res?.error) {
+      toast({ title: "Erreur", description: "Email ou mot de passe incorrect", variant: "destructive" });
     } else {
-      toast({
-        title: "Connexion réussie !",
-        description: "Bienvenue sur Inbox2Excel",
-      });
-      router.push("/dashboard");
+      // router.push("/dashboard");
     }
   };
 
-  // Step 1: Plan selection
-  if (!selectedPlan) {
+  // Register + Stripe Payment Logic
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setStripeError(null);
+    
+    if (!isPasswordStrong(password) || password !== confirmPassword) {
+        toast({ title: "Validation", description: "Veuillez vérifier vos informations", variant: "destructive" });
+        return;
+    }
+
+    setIsLoading(true);
+    try {
+      // 1. Register User in MongoDB (Status will be pending)
+      const regRes = await fetch("/api/register", {
+        method: "POST",
+        body: JSON.stringify({ email, password, plan: selectedPlan }),
+        headers: { "Content-Type": "application/json" }
+      });
+
+      if (!regRes.ok) {
+        const errData = await regRes.json();
+        throw new Error(errData.message || "Registration failed");
+      }
+
+      const regData = await regRes.json();
+      console.log("✅ User registered:", regData);
+
+      // 2. Create Stripe Session
+      const stripeRes = await fetch("/api/checkout", {
+        method: "POST",
+        body: JSON.stringify({ email, planId: selectedPlan }),
+        headers: { "Content-Type": "application/json" }
+      });
+
+      const stripeData = await stripeRes.json();
+      console.log("📦 Stripe response:", stripeData);
+
+      // Check if response has error
+      if (!stripeRes.ok || stripeData.error) {
+        throw new Error(stripeData.message || stripeData.error || "Stripe session creation failed");
+      }
+      
+      // Check if URL exists
+      if (stripeData.url) {
+        console.log("🔄 Redirecting to:", stripeData.url);
+        
+        // Check if it's a mock/dummy session (development mode)
+        if (stripeData.mock || stripeData.url.includes("mock=true")) {
+          setStripeError({
+            type: "warning",
+            title: "Mode Développement",
+            message: "Vous utilisez des prix fictifs. Configurez Stripe pour les paiements réels.",
+            details: stripeData.devNote
+          });
+          
+          // Redirect after showing warning
+          setTimeout(() => {
+            window.location.href = stripeData.url;
+          }, 2000);
+        } else {
+          // Real Stripe session - redirect immediately
+          window.location.href = stripeData.url;
+        }
+      } else {
+        throw new Error("URL de session manquante dans la réponse");
+      }
+
+    } catch (err) {
+      console.error("❌ Registration/Checkout Error:", err);
+      
+      setStripeError({
+        type: "error",
+        title: "Erreur",
+        message: err.message,
+        details: null
+      });
+      
+      toast({ 
+        title: "Erreur", 
+        description: err.message, 
+        variant: "destructive" 
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Google Login
+  const handleGoogleAuth = () => signIn("google", { callbackUrl: "/dashboard" });
+
+  // Handle plan selection
+  const handlePlanSelection = (planId) => {
+    setSelectedPlan(planId);
+    setCurrentView("register");
+    setStripeError(null);
+  };
+
+  // Reset to plan selection
+  const resetToPlanSelection = () => {
+    setCurrentView("planSelection");
+    setSelectedPlan(null);
+    setEmail("");
+    setPassword("");
+    setConfirmPassword("");
+    setEmailError(null);
+    setStripeError(null);
+  };
+
+  // Switch to login
+  const switchToLogin = () => {
+    setCurrentView("login");
+    setPassword("");
+    setConfirmPassword("");
+    setStripeError(null);
+  };
+
+  // Switch to register (show plan selection first)
+  const switchToRegister = () => {
+    setCurrentView("planSelection");
+    setSelectedPlan(null);
+    setPassword("");
+    setConfirmPassword("");
+    setStripeError(null);
+  };
+
+  // 1. Plan Selection View
+  if (currentView === "planSelection") {
     return (
       <div className="min-h-screen bg-background py-12 px-4">
         <div className="container mx-auto max-w-5xl">
-          <Button
-            variant="ghost"
-            onClick={() => router.push("/")}
-            className="mb-8"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Retour à l'accueil
+          <Button variant="ghost" onClick={() => router.push("/")} className="mb-8">
+            <ArrowLeft className="h-4 w-4 mr-2" /> Retour à l'accueil
           </Button>
 
           <div className="text-center mb-12">
-            <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-              Choisissez votre plan
-            </h1>
-            <p className="text-lg text-muted-foreground">
-              Sélectionnez le plan qui correspond à vos besoins
-            </p>
+            <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-4">Choisissez votre plan</h1>
+            <p className="text-lg text-muted-foreground">Sélectionnez le plan qui correspond à vos besoins</p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-6">
             {plans.map((plan) => (
-              <div
-                key={plan.id}
-                onClick={() => setSelectedPlan(plan.id)}
+              <div key={plan.id} onClick={() => handlePlanSelection(plan.id)}
                 className={`relative rounded-2xl bg-card p-8 transition-all duration-300 cursor-pointer hover:-translate-y-1 ${
-                  plan.popular
-                    ? "border-2 border-accent shadow-lg ring-1 ring-accent/20"
-                    : "border border-border hover:border-accent/40 hover:shadow-md"
-                }`}
-              >
+                  plan.popular ? "border-2 border-accent shadow-lg ring-1 ring-accent/20" : "border border-border hover:border-accent/40 hover:shadow-md"
+                }`}>
                 {plan.popular && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="bg-accent text-accent-foreground text-xs font-semibold px-4 py-1.5 rounded-full uppercase tracking-wide">
-                      Populaire
-                    </span>
+                    <span className="bg-accent text-accent-foreground text-xs font-semibold px-4 py-1.5 rounded-full uppercase tracking-wide">Populaire</span>
                   </div>
                 )}
-
                 <div className="text-center mb-8">
-                  <h3 className="text-xl font-bold text-foreground mb-6">
-                    {plan.name}
-                  </h3>
-                  
+                  <h3 className="text-xl font-bold text-foreground mb-6">{plan.name}</h3>
                   <div className="flex items-baseline justify-center gap-1">
-                    <span className="text-5xl font-extrabold text-foreground">
-                      {plan.price}€
-                    </span>
+                    <span className="text-5xl font-extrabold text-foreground">{plan.price}€</span>
                   </div>
-                  
                   <div className="flex items-center justify-center gap-1.5 mt-2 text-muted-foreground text-sm">
-                    <Users className="h-4 w-4" />
-                    <span>par utilisateur / mois</span>
+                    <Users className="h-4 w-4" /> <span>par utilisateur / mois</span>
                   </div>
                 </div>
-
                 <ul className="space-y-4 mb-8">
                   {plan.features.map((feature) => (
                     <li key={feature} className="flex items-start gap-3">
@@ -296,31 +260,15 @@ function AuthContent() {
                     </li>
                   ))}
                 </ul>
-
-                <Button 
-                  className={`w-full ${
-                    plan.popular 
-                      ? "bg-accent hover:bg-accent/90 text-accent-foreground" 
-                      : "bg-primary hover:bg-primary/90 text-primary-foreground"
-                  }`}
-                  size="lg"
-                >
+                <Button className={`w-full ${plan.popular ? "bg-accent hover:bg-accent/90 text-accent-foreground" : "bg-primary hover:bg-primary/90 text-primary-foreground"}`} size="lg">
                   Choisir {plan.name}
                 </Button>
               </div>
             ))}
           </div>
-
           <div className="text-center mt-8">
-            <p className="text-sm text-muted-foreground">
-              Vous avez déjà un compte ?{" "}
-              <button
-                type="button"
-                onClick={() => setSelectedPlan("login")}
-                className="text-accent hover:underline font-medium"
-              >
-                Connectez-vous
-              </button>
+            <p className="text-sm text-muted-foreground">Vous avez déjà un compte ?{" "}
+              <button type="button" onClick={switchToLogin} className="text-accent hover:underline font-medium">Connectez-vous</button>
             </p>
           </div>
         </div>
@@ -328,235 +276,170 @@ function AuthContent() {
     );
   }
 
-  // Login form
-  if (selectedPlan === "login") {
+  // 2. Login View
+  if (currentView === "login") {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center py-12 px-4">
-        <div className="w-full max-w-md">
-          <Button
-            variant="ghost"
-            onClick={() => router.push("/")}
-            className="mb-6"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Retour à l'accueil
-          </Button>
-
-          <Card>
-            <CardHeader className="text-center">
-              <CardTitle className="text-2xl">Inbox2Excel</CardTitle>
-              <CardDescription>
-                Connectez-vous à votre compte
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="login-email">Email</Label>
-                  <Input
-                    id="login-email"
-                    type="email"
-                    placeholder="votre@email.com"
-                    value={email}
-                    onChange={(e) => handleEmailChange(e.target.value)}
-                    required
-                    className={email.length > 0 ? (emailError ? "border-destructive focus-visible:ring-destructive" : validateEmail(email).isValid ? "border-green-500 focus-visible:ring-green-500" : "") : ""}
-                  />
-                  {emailError && (
-                    <p className="text-xs text-destructive mt-1">{emailError}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="login-password">Mot de passe</Label>
-                  <div className="relative">
-                    <Input
-                      id="login-password"
-                      type={showPassword ? "text" : "password"}
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                      className="pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Connexion...
-                    </>
-                  ) : (
-                    "Se connecter"
-                  )}
-                </Button>
-              </form>
-              
-              <div className="text-center pt-4 mt-4 border-t">
-                <p className="text-sm text-muted-foreground">
-                  Vous n'avez pas de compte ?{" "}
-                  <button
-                    type="button"
-                    onClick={() => setSelectedPlan(null)}
-                    className="text-accent hover:underline font-medium"
-                  >
-                    Créez-en un
-                  </button>
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
-  // Step 2: Signup form before payment
-  const selectedPlanData = plans.find(p => p.id === selectedPlan);
-
-  return (
-    <div className="min-h-screen bg-background flex items-center justify-center py-12 px-4">
-      <div className="w-full max-w-md">
-        <Button
-          variant="ghost"
-          onClick={() => setSelectedPlan(null)}
-          className="mb-6"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Changer de plan
-        </Button>
-
-        <Card>
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Créez votre compte</CardTitle>
-            {selectedPlanData && (
-              <CardDescription>
-                Plan sélectionné : <span className="font-semibold text-accent">{selectedPlanData.name} - {selectedPlanData.price}€/mois</span>
-              </CardDescription>
-            )}
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <div className="flex justify-between items-center mb-2">
+              <button onClick={() => router.push("/")} className="text-sm text-muted-foreground hover:text-foreground flex items-center">
+                  <ArrowLeft className="h-3 w-3 mr-1" /> Retour
+              </button>
+            </div>
+            <CardTitle className="text-2xl text-center">Connexion</CardTitle>
+            <CardDescription className="text-center">
+              Heureux de vous revoir
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <form onSubmit={handleProceedToPayment} className="space-y-4">
+          <CardContent className="space-y-4">
+            <Button variant="outline" className="w-full" onClick={handleGoogleAuth} disabled={isLoading}>
+              Continuer avec Google
+            </Button>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+              <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">Ou avec email</span></div>
+            </div>
+
+            <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="signup-email">Email</Label>
-                <Input
-                  id="signup-email"
-                  type="email"
-                  placeholder="votre@email.com"
-                  value={email}
-                  onChange={(e) => handleEmailChange(e.target.value)}
-                  required
-                  className={email.length > 0 ? (emailError ? "border-destructive focus-visible:ring-destructive" : validateEmail(email).isValid ? "border-green-500 focus-visible:ring-green-500" : "") : ""}
-                />
-                {emailError && (
-                  <p className="text-xs text-destructive mt-1">{emailError}</p>
-                )}
+                <Label>Email</Label>
+                <Input type="email" value={email} onChange={(e) => handleEmailChange(e.target.value)} placeholder="votre@email.com" required disabled={isLoading}/>
+                {emailError && <p className="text-xs text-red-500">{emailError}</p>}
               </div>
+
               <div className="space-y-2">
-                <Label htmlFor="signup-password">Mot de passe</Label>
+                <Label>Mot de passe</Label>
                 <div className="relative">
-                  <Input
-                    id="signup-password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className={`pr-10 ${password.length > 0 ? (isPasswordStrong(password) ? "border-green-500 focus-visible:ring-green-500" : "border-destructive focus-visible:ring-destructive") : ""}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  <Input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required disabled={isLoading}/>
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-2.5 text-muted-foreground">
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-                
-                {/* Password strength indicator */}
-                {password && (
-                  <div className="mt-2 space-y-1.5">
-                    {passwordRules.map((rule) => (
-                      <div key={rule.id} className="flex items-center gap-2 text-xs">
-                        {rule.test(password) ? (
-                          <Check className="h-3 w-3 text-green-500" />
-                        ) : (
-                          <X className="h-3 w-3 text-destructive" />
-                        )}
-                        <span className={rule.test(password) ? "text-green-600" : "text-muted-foreground"}>
-                          {rule.label}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirm-password">Confirmer le mot de passe</Label>
-                <div className="relative">
-                  <Input
-                    id="confirm-password"
-                    type={showConfirmPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                    className={`pr-10 ${confirmPassword.length > 0 ? (password === confirmPassword && isPasswordStrong(password) ? "border-green-500 focus-visible:ring-green-500" : "border-destructive focus-visible:ring-destructive") : ""}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-                {confirmPassword && password !== confirmPassword && (
-                  <p className="text-xs text-destructive mt-1">Les mots de passe ne correspondent pas</p>
-                )}
-              </div>
-              
-              <div className="bg-muted/50 rounded-lg p-3 text-sm text-muted-foreground">
-                <p>Après validation, vous serez redirigé vers la page de paiement sécurisée Stripe. Votre compte sera créé uniquement après confirmation du paiement.</p>
               </div>
 
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? (
                   <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Redirection vers le paiement...
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Connexion...
+                  </>
+                ) : (
+                  "Se connecter"
+                )}
+              </Button>
+            </form>
+
+            <Button variant="link" className="w-full text-muted-foreground" onClick={switchToRegister} disabled={isLoading}>
+              Pas de compte ? S'inscrire
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // 3. Registration View (after plan selection)
+  if (currentView === "register" && selectedPlan) {
+    const currentPlan = plans.find(p => p.id === selectedPlan);
+    
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <div className="flex justify-between items-center mb-2">
+              <button onClick={resetToPlanSelection} className="text-sm text-muted-foreground hover:text-foreground flex items-center">
+                  <ArrowLeft className="h-3 w-3 mr-1" /> Changer le plan
+              </button>
+            </div>
+            <CardTitle className="text-2xl text-center">Créer un compte</CardTitle>
+            <CardDescription className="text-center">
+              <div className="mt-2 inline-flex items-center gap-2 bg-accent/10 px-3 py-1.5 rounded-full">
+                <span className="text-sm font-medium text-accent">Plan {currentPlan?.name}</span>
+                <span className="text-sm text-muted-foreground">•</span>
+                <span className="text-sm font-semibold text-foreground">{currentPlan?.price}€/mois</span>
+              </div>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Stripe Error/Warning Alert */}
+            {stripeError && (
+              <Alert variant={stripeError.type === "warning" ? "default" : "destructive"}>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <div className="font-semibold">{stripeError.title}</div>
+                  <div className="text-sm mt-1">{stripeError.message}</div>
+                  {stripeError.details && (
+                    <div className="text-xs mt-2 opacity-80">
+                      {JSON.stringify(stripeError.details, null, 2)}
+                    </div>
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <Button variant="outline" className="w-full" onClick={handleGoogleAuth} disabled={isLoading}>
+              Continuer avec Google
+            </Button>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+              <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">Ou avec email</span></div>
+            </div>
+
+            <form onSubmit={handleRegister} className="space-y-4">
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input type="email" value={email} onChange={(e) => handleEmailChange(e.target.value)} placeholder="votre@email.com" required disabled={isLoading}/>
+                {emailError && <p className="text-xs text-red-500">{emailError}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label>Mot de passe</Label>
+                <div className="relative">
+                  <Input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required disabled={isLoading}/>
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-2.5 text-muted-foreground">
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Confirmer le mot de passe</Label>
+                <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="••••••••" required disabled={isLoading}/>
+                {password && (
+                  <div className="grid grid-cols-1 gap-1 mt-2">
+                    {passwordRules.map(r => (
+                      <div key={r.id} className={`flex items-center gap-2 text-xs ${r.test(password) ? "text-green-500" : "text-gray-400"}`}>
+                        {r.test(password) ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />} {r.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Redirection vers paiement...
                   </>
                 ) : (
                   "Continuer vers le paiement"
                 )}
               </Button>
             </form>
-            
-            <div className="text-center pt-4 mt-4 border-t">
-              <p className="text-sm text-muted-foreground">
-                Vous avez déjà un compte ?{" "}
-                <button
-                  type="button"
-                  onClick={() => setSelectedPlan("login")}
-                  className="text-accent hover:underline font-medium"
-                >
-                  Connectez-vous
-                </button>
-              </p>
-            </div>
+
+            <Button variant="link" className="w-full text-muted-foreground" onClick={switchToLogin} disabled={isLoading}>
+              Déjà un compte ? Se connecter
+            </Button>
           </CardContent>
         </Card>
       </div>
-    </div>
-  );
+    );
+  }
+
+  // Fallback
+  return null;
 }
-
-
-export default AuthContent

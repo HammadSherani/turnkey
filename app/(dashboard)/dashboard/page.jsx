@@ -49,16 +49,16 @@ export default function Dashboard() {
       setUser(session.user);
       setIsAuthLoading(false);
     };
-    // checkAuth();
-    // const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-    //   if (event === "SIGNED_OUT" || !session) {
-    //     router.push("/auth?mode=login");
-    //   } else if (session) {
-    //     setUser(session.user);
-    //     setIsAuthLoading(false);
-    //   }
-    // });
-    // return () => subscription.unsubscribe();
+    checkAuth();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT" || !session) {
+        router.push("/auth?mode=login");
+      } else if (session) {
+        setUser(session.user);
+        setIsAuthLoading(false);
+      }
+    });
+    return () => subscription.unsubscribe();
   }, [router]);
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -132,41 +132,41 @@ export default function Dashboard() {
       }
     }
   };
-//   if (isAuthLoading || quotas.isLoading) {
-//     return (
-//       <div className="min-h-screen bg-background flex items-center justify-center">
-//         <div className="flex flex-col items-center gap-3">
-//           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-//           <p className="text-sm text-muted-foreground">
-//             {isAuthLoading ? "Verifying authentication..." : "Loading your subscription..."}
-//           </p>
-//         </div>
-//       </div>
-//     );
-//   }
+  if (isAuthLoading || quotas.isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">
+            {isAuthLoading ? "Verifying authentication..." : "Loading your subscription..."}
+          </p>
+        </div>
+      </div>
+    );
+  }
   // If not subscribed, show message
-//   if (!quotas.isSubscribed) {
-//     return (
-//       <div className="min-h-screen bg-background flex items-center justify-center">
-//         <div className="max-w-md text-center space-y-4 p-6">
-//           <h1 className="text-2xl font-bold text-foreground">No Active Subscription</h1>
-//           <p className="text-muted-foreground">
-//             You don't have an active subscription. Choose a plan to start using Inbox2Excel.
-//           </p>
-//           <div className="flex gap-3 justify-center">
-//             <Button onClick={() => router.push("/auth")}>
-//               <TrendingUp className="h-4 w-4 mr-2" />
-//               Choose a Plan
-//             </Button>
-//             <Button variant="outline" onClick={handleLogout}>
-//               <LogOut className="h-4 w-4 mr-2" />
-//               Log Out
-//             </Button>
-//           </div>
-//         </div>
-//       </div>
-//     );
-//   }
+  if (!quotas.isSubscribed) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="max-w-md text-center space-y-4 p-6">
+          <h1 className="text-2xl font-bold text-foreground">No Active Subscription</h1>
+          <p className="text-muted-foreground">
+            You don't have an active subscription. Choose a plan to start using Inbox2Excel.
+          </p>
+          <div className="flex gap-3 justify-center">
+            <Button onClick={() => router.push("/auth")}>
+              <TrendingUp className="h-4 w-4 mr-2" />
+              Choose a Plan
+            </Button>
+            <Button variant="outline" onClick={handleLogout}>
+              <LogOut className="h-4 w-4 mr-2" />
+              Log Out
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
