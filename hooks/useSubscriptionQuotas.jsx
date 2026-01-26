@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const DEFAULT_LIMITS = {
   starter: { extractionsPerMonth: 500, maxFilters: 2, maxFieldsPerFilter: 2 },
@@ -33,232 +33,153 @@ export function useSubscriptionQuotas() {
   const [subscriptionData, setSubscriptionData] = useState(null);
   const [savedFilters, setSavedFilters] = useState([]);
 
-  // --- Helper to get headers with Token ---
-  const getAuthHeaders = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) alert("No access token found");
-    return {
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-      },
-    };
-  };
-
-  // 1. Fetch subscription status (Updated with Headers)
-  // 1. Fetch subscription status (CLEANED UP)
   const fetchSubscription = useCallback(async () => {
     try {
       setError(null);
-
-      // The SDK automatically grabs the session token and adds it to the headers.
-      // Do NOT pass a second argument unless it's the 'body' of your POST request.
-      const { data, error: fnError } = await supabase.functions.invoke("check-subscription");
-
-      if (fnError) {
-        // If fnError.status is 401, the user is likely not logged in
-        console.error("Function Error:", fnError);
-        setError("Session expirée ou non autorisée");
-        return;
-      }
-
+      const response = await fetch("/api/subscription/status");
+      
+      if (!response.ok) throw new Error("Failed to fetch subscription");
+      
+      const data = await response.json();
       setSubscriptionData(data);
     } catch (err) {
-      console.error("Connection Error:", err);
-      setError("Erreur de connexion");
+      console.error("Subscription Fetch Error:", err);
+      setError("Failed to load subscription data");
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  // 2. Fetch saved filters from database
   const fetchSavedFilters = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data, error } = await supabase
-        .from("saved_filters")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error("Error fetching filters:", error);
-        return;
-      }
-      const filters = (data || []).map((f) => ({
-        id: f.id,
+      const response = await fetch("/api/filters");
+      if (!response.ok) throw new Error("Failed to fetch filters");
+      
+      const data = await response.json();
+      
+      const formattedFilters = (data.filters || []).map((f) => ({
+        id: f._id || f.id,
         name: f.name,
-        createdAt: new Date(f.created_at),
+        createdAt: new Date(f.createdAt),
         data: {
-          subject: f.subject_filter || "",
-          sender: f.sender_filter || "",
-          startDate: f.start_date ? new Date(f.start_date) : undefined,
-          endDate: f.end_date ? new Date(f.end_date) : undefined,
-          extractionRules: Array.isArray(f.extraction_rules) ? f.extraction_rules : [],
+          subject: f.subject || "",
+          sender: f.sender || "",
+          startDate: f.startDate ? new Date(f.startDate) : undefined,
+          endDate: f.endDate ? new Date(f.endDate) : undefined,
+          extractionRules: f.extractionRules || [],
         },
       }));
-      setSavedFilters(filters);
+      setSavedFilters(formattedFilters);
     } catch (err) {
-      console.error("Filter fetch error:", err);
+      console.error("Filter Fetch Error:", err);
     }
   }, []);
 
-  // Initial fetch and periodic refresh
   useEffect(() => {
     fetchSubscription();
-    // fetchSavedFilters();
-    const interval = setInterval(() => {
-      fetchSubscription();
-    }, 60000);
-    return () => clearInterval(interval);
+    fetchSavedFilters();
   }, [fetchSubscription, fetchSavedFilters]);
 
-  // Derived values
-  const plan = subscriptionData?.plan || null;
-  const isSubscribed = subscriptionData?.subscribed || false;
-  const limits = subscriptionData?.limits || (plan ? DEFAULT_LIMITS[plan] : DEFAULT_LIMITS.starter);
-  const subscriptionEnd = subscriptionData?.subscription_end;
-  const extractionsUsedThisMonth = subscriptionData?.usage?.extractionsUsedThisMonth || 0;
+  const plan = subscriptionData?.plan || "starter";
+  const isSubscribed = subscriptionData?.isSubscribed || false;
+  const limits = subscriptionData?.limits || DEFAULT_LIMITS[plan];
+  
+  const extractionsUsedThisMonth = subscriptionData?.usage?.extractionsCount || 0;
   const savedFiltersCount = savedFilters.length;
-  const planName = plan ? PLAN_NAMES[plan] : null;
-  const planPrice = plan ? PLAN_PRICES[plan] : null;
-  const nextPlan = plan ? NEXT_PLAN[plan] : "starter";
+  
+  const planName = PLAN_NAMES[plan];
+  const planPrice = PLAN_PRICES[plan];
+  const nextPlan = NEXT_PLAN[plan];
   const nextPlanName = nextPlan ? PLAN_NAMES[nextPlan] : null;
-  const nextPlanPrice = nextPlan ? PLAN_PRICES[nextPlan] : null;
 
   const canExtract = isSubscribed && extractionsUsedThisMonth < limits.extractionsPerMonth;
   const isMonthlyLimitReached = extractionsUsedThisMonth >= limits.extractionsPerMonth;
-  const extractionsRemainingThisMonth = Math.max(0, limits.extractionsPerMonth - extractionsUsedThisMonth);
-  const monthlyUsagePercent = Math.min(100, (extractionsUsedThisMonth / limits.extractionsPerMonth) * 100);
-
-  const canSaveFilter = isSubscribed && savedFiltersCount < limits.maxFilters;
+  
+  const canSaveFilter = savedFiltersCount < limits.maxFilters;
   const filtersRemaining = Math.max(0, limits.maxFilters - savedFiltersCount);
-  const filtersUsagePercent = (savedFiltersCount / limits.maxFilters) * 100;
 
-  const canAddField = (currentFieldsCount) => currentFieldsCount < limits.maxFieldsPerFilter;
-  const fieldsRemaining = (currentFieldsCount) => Math.max(0, limits.maxFieldsPerFilter - currentFieldsCount);
-
-  // 3. Consume extraction via backend (Updated with Headers)
   const consumeExtraction = useCallback(async () => {
     try {
-      const headers = await getAuthHeaders();
-      const { data, error: fnError } = await supabase.functions.invoke("consume-extraction", headers);
+      const response = await fetch("/api/subscription/consume", { method: "POST" });
+      const data = await response.json();
 
-      if (fnError) {
-        return { success: false, error: fnError.message };
+      if (data.success) {
+        setSubscriptionData(prev => ({
+          ...prev,
+          usage: {
+            ...prev.usage,
+            extractionsCount: data.newCount
+          }
+        }));
+        return { success: true };
       }
-      if (!data.success) {
-        return { success: false, error: data.error };
-      }
-
-      setSubscriptionData(prev => prev ? {
-        ...prev,
-        usage: {
-          ...prev.usage,
-          extractionsUsedThisMonth: data.usage.extractionsUsedThisMonth,
-        }
-      } : null);
-      return { success: true };
+      return { success: false, error: data.error };
     } catch (err) {
       return { success: false, error: err.message };
     }
   }, []);
 
-  // 4. Save filter to database
-  const saveFilter = useCallback(async (name, data) => {
-    if (!canSaveFilter) return false;
+  const saveFilter = useCallback(async (name, filterData) => {
+    if (!canSaveFilter) {
+      toast.error("Limit reached! Upgrade your plan to save more filters.");
+      return false;
+    }
+
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return false;
-      const insertData = {
-        user_id: user.id,
-        name,
-        subject_filter: data.subject || null,
-        sender_filter: data.sender || null,
-        start_date: data.startDate ? data.startDate.toISOString().split("T")[0] : null,
-        end_date: data.endDate ? data.endDate.toISOString().split("T")[0] : null,
-        extraction_rules: data.extractionRules,
-      };
-      const { data: newFilter, error } = await supabase
-        .from("saved_filters")
-        .insert(insertData)
-        .select()
-        .single();
-      if (error) {
-        console.error("Error saving filter:", error);
-        return false;
-      }
+      const response = await fetch("/api/filters", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, ...filterData }),
+      });
+
+      if (!response.ok) throw new Error("Failed to save filter");
+      
+      const newFilter = await response.json();
+      
       setSavedFilters(prev => [{
         id: newFilter.id,
         name: newFilter.name,
-        createdAt: new Date(newFilter.created_at),
-        data,
+        createdAt: new Date(),
+        data: filterData,
       }, ...prev]);
+      
+      toast.success("Filter saved successfully!");
       return true;
     } catch (err) {
-      console.error("Save filter error:", err);
+      console.error("Save Filter Error:", err);
       return false;
     }
   }, [canSaveFilter]);
 
-  // 5. Delete filter from database
   const deleteFilter = useCallback(async (filterId) => {
     try {
-      const { error } = await supabase
-        .from("saved_filters")
-        .delete()
-        .eq("id", filterId);
-      if (error) {
-        console.error("Error deleting filter:", error);
-        return false;
+      const response = await fetch(`/api/filters/${filterId}`, { method: "DELETE" });
+      
+      if (response.ok) {
+        setSavedFilters(prev => prev.filter(f => f.id !== filterId));
+        toast.success("Filter deleted");
+        return true;
       }
-      setSavedFilters(prev => prev.filter(f => f.id !== filterId));
-      return true;
+      return false;
     } catch (err) {
-      console.error("Delete filter error:", err);
+      console.error("Delete Error:", err);
       return false;
     }
   }, []);
 
-  // 6. Open customer portal (Updated with Headers)
   const openCustomerPortal = useCallback(async () => {
     try {
-      const headers = await getAuthHeaders();
-      const { data, error: fnError } = await supabase.functions.invoke("customer-portal", headers);
-
-      if (fnError) {
-        return { success: false, error: fnError.message };
-      }
-      if (data.error) {
-        return { success: false, error: data.error };
-      }
+      const response = await fetch("/api/subscription/portal", { method: "POST" });
+      const data = await response.json();
       if (data.url) {
-        window.open(data.url, "_blank");
+        window.location.href = data.url;
         return { success: true };
       }
-      return { success: false, error: "URL non disponible" };
+      return { success: false, error: "Portal unavailable" };
     } catch (err) {
       return { success: false, error: err.message };
     }
   }, []);
-
-  // Message helpers
-  const getExtractionBlockedMessage = () => {
-    if (!isSubscribed) return "Vous n'avez pas d'abonnement actif.";
-    if (isMonthlyLimitReached) return "Vous avez atteint votre quota mensuel d'extractions.";
-    return null;
-  };
-  const getFilterBlockedMessage = () => {
-    if (!isSubscribed) return "Vous n'avez pas d'abonnement actif.";
-    if (!canSaveFilter) return "Limite de filtres atteinte pour votre abonnement.";
-    return null;
-  };
-  const getFieldBlockedMessage = (currentFieldsCount) => {
-    if (!canAddField(currentFieldsCount)) {
-      return `Votre abonnement autorise jusqu'à ${limits.maxFieldsPerFilter} champs par filtre.`;
-    }
-    return null;
-  };
 
   return {
     isLoading,
@@ -269,29 +190,19 @@ export function useSubscriptionQuotas() {
     planPrice,
     nextPlan,
     nextPlanName,
-    nextPlanPrice,
     limits,
-    subscriptionEnd,
     extractionsUsedThisMonth,
-    extractionsRemainingThisMonth,
-    monthlyUsagePercent,
     canExtract,
     isMonthlyLimitReached,
     savedFiltersCount,
     savedFilters,
     canSaveFilter,
     filtersRemaining,
-    filtersUsagePercent,
     maxFieldsPerFilter: limits.maxFieldsPerFilter,
-    canAddField,
-    fieldsRemaining,
     consumeExtraction,
     saveFilter,
     deleteFilter,
     openCustomerPortal,
     refreshSubscription: fetchSubscription,
-    getExtractionBlockedMessage,
-    getFilterBlockedMessage,
-    getFieldBlockedMessage,
   };
 }

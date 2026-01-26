@@ -11,7 +11,6 @@ import { Check, Users, ArrowLeft, Loader2, Eye, EyeOff, X, AlertCircle } from "l
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-// Validation Rules
 const passwordRules = [
   { id: "length", label: "Au moins 8 caractères", test: (p) => p.length >= 8 },
   { id: "uppercase", label: "Une lettre majuscule", test: (p) => /[A-Z]/.test(p) },
@@ -41,7 +40,7 @@ export default function AuthPage() {
   const { toast } = useToast();
 
   // State management
-  const [currentView, setCurrentView] = useState("planSelection"); // planSelection, login, register
+  const [currentView, setCurrentView] = useState("planSelection"); 
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -51,9 +50,7 @@ export default function AuthPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [stripeError, setStripeError] = useState(null);
 
-  // Redirect logic handle
   useEffect(() => {
-    // Check URL params for mode
     const mode = searchParams?.get("mode");
     const plan = searchParams?.get("plan");
     
@@ -64,7 +61,6 @@ export default function AuthPage() {
       setCurrentView("register");
     }
     
-    // Check for NextAuth Errors (like Google Auth Fail)
     const error = searchParams?.get("error");
     if (error === "OAuthSignin") {
       setCurrentView("login");
@@ -77,7 +73,6 @@ export default function AuthPage() {
     setEmailError(validateEmail(value).error || null);
   };
 
-  // Login Logic
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsLoading(true);
@@ -87,11 +82,10 @@ export default function AuthPage() {
     if (res?.error) {
       toast({ title: "Erreur", description: "Email ou mot de passe incorrect", variant: "destructive" });
     } else {
-      // router.push("/dashboard");
+      router.push("/dashboard");
     }
   };
 
-  // Register + Stripe Payment Logic
   const handleRegister = async (e) => {
     e.preventDefault();
     setStripeError(null);
@@ -178,17 +172,14 @@ export default function AuthPage() {
     }
   };
 
-  // Google Login
   const handleGoogleAuth = () => signIn("google", { callbackUrl: "/dashboard" });
 
-  // Handle plan selection
   const handlePlanSelection = (planId) => {
     setSelectedPlan(planId);
     setCurrentView("register");
     setStripeError(null);
   };
 
-  // Reset to plan selection
   const resetToPlanSelection = () => {
     setCurrentView("planSelection");
     setSelectedPlan(null);
@@ -199,7 +190,6 @@ export default function AuthPage() {
     setStripeError(null);
   };
 
-  // Switch to login
   const switchToLogin = () => {
     setCurrentView("login");
     setPassword("");
@@ -207,7 +197,6 @@ export default function AuthPage() {
     setStripeError(null);
   };
 
-  // Switch to register (show plan selection first)
   const switchToRegister = () => {
     setCurrentView("planSelection");
     setSelectedPlan(null);
@@ -216,7 +205,11 @@ export default function AuthPage() {
     setStripeError(null);
   };
 
-  // 1. Plan Selection View
+
+  if(session) {
+    router.push("/dashboard");
+  }
+
   if (currentView === "planSelection") {
     return (
       <div className="min-h-screen bg-background py-12 px-4">
@@ -276,7 +269,6 @@ export default function AuthPage() {
     );
   }
 
-  // 2. Login View
   if (currentView === "login") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
@@ -340,7 +332,6 @@ export default function AuthPage() {
     );
   }
 
-  // 3. Registration View (after plan selection)
   if (currentView === "register" && selectedPlan) {
     const currentPlan = plans.find(p => p.id === selectedPlan);
     

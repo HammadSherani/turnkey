@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useSession, signOut } from "next-auth/react"; // NextAuth hooks
 import { Button } from "@/components/ui/button";
-import { LogOut, User, Loader2, TrendingUp, RefreshCw } from "lucide-react";
+import { LogOut, User, Loader2, TrendingUp } from "lucide-react";
 import { useSubscriptionQuotas } from "@/hooks/useSubscriptionQuotas";
 import { useOutlookConnection } from "@/hooks/useOutlookConnection";
 import FiltersSidebar from "@/components/dashboard/FiltersSidebar";
@@ -12,7 +13,6 @@ import OutlookConnectModal from "@/components/dashboard/OutlookConnectModal";
 import SaveFilterModal from "@/components/dashboard/SaveFilterModal";
 import ExtractionLimitAlert from "@/components/dashboard/ExtractionLimitAlert";
 import SubscriptionStatus from "@/components/dashboard/SubscriptionStatus";
-import { supabase } from "@/integrations/supabase/client";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,8 +24,8 @@ import { toast } from "sonner";
 
 export default function Dashboard() {
   const router = useRouter();
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [user, setUser] = useState(null);
+  const { data: session, status } = useSession(); // NextAuth Session
+
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [showSaveFilterModal, setShowSaveFilterModal] = useState(false);
   const [pendingFilterData, setPendingFilterData] = useState(null);
@@ -33,69 +33,90 @@ export default function Dashboard() {
   const [hasExtracted, setHasExtracted] = useState(false);
   const [extractedData, setExtractedData] = useState([]);
   const [isConnectingOutlook, setIsConnectingOutlook] = useState(false);
-  // Subscription quotas hook
+
+  // Hooks
   const quotas = useSubscriptionQuotas();
- 
-  // Outlook connection hook
   const outlook = useOutlookConnection();
-  // Check authentication
+
+  // Check Authentication logic (NextAuth way)
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push("/auth?mode=login");
-        return;
-      }
-      setUser(session.user);
-      setIsAuthLoading(false);
-    };
-    checkAuth();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_OUT" || !session) {
-        router.push("/auth?mode=login");
-      } else if (session) {
-        setUser(session.user);
-        setIsAuthLoading(false);
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, [router]);
+    if (status === "unauthenticated") {
+      router.push("/auth?mode=login");
+    }
+  }, [status, router]);
+
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/");
+    await signOut({ callbackUrl: "/" });
   };
-  const handleExtract = async () => {
+
+
+  const handleDisconnect = async () => {
+    if (!confirm("Do you really want to disconnect Outlook?.")) return;
+
+
+    try {
+      const response = await fetch("/api/outlook/logout", {
+        method: "POST",
+      });
+
+      if (response.ok) {
+        alert("Successfully Disconnected!");
+        window.location.reload();
+      } else {
+        const data = await response.json();
+        alert(data.error || "Logout failed");
+      }
+    } catch (err) {
+      console.error("Logout error:", err);
+    }
+  };
+
+  const handleExtract = async (payload) => {
     if (!outlook.isConnected) {
       setShowConnectModal(true);
       return;
     }
-    // Check extraction limits
-    if (!quotas.canExtract) {
-      const message = quotas.getExtractionBlockedMessage();
-      if (message) {
-        toast.error(message);
-      }
-      return;
-    }
-    // Simulation de l'extraction avec consommation backend
+
     setIsExtracting(true);
-   
-    const result = await quotas.consumeExtraction();
-   
-    setIsExtracting(false);
-   
-    if (result.success) {
-      setHasExtracted(true);
-      setExtractedData([]);
-      toast.success("Extraction completed successfully!");
-    } else {
-      toast.error(result.error || "Error during extraction");
+
+    try {
+      const response = await fetch("/api/outlook/extract", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to extract data");
+      }
+        setExtractedData(result.results || []);
+        toast.success(`Success! Extracted data from ${result.results?.length || 0} emails.`);
+
+      // const quotaResult = await quotas.consumeExtraction();
+
+      // if (quotaResult.success) {
+      //   setHasExtracted(true);
+      // } else {
+      //   toast.error("Quota update failed, but data was fetched.");
+      // }
+
+    } catch (error) {
+      console.error("Extraction Error:", error);
+      toast.error(error.message || "Error during extraction");
+    } finally {
+      setIsExtracting(false);
     }
   };
+
   const handleOpenSaveModal = (data) => {
     setPendingFilterData(data);
     setShowSaveFilterModal(true);
   };
+
   const handleSaveFilter = async (name) => {
     if (!pendingFilterData) return false;
     const success = await quotas.saveFilter(name, pendingFilterData);
@@ -105,99 +126,96 @@ export default function Dashboard() {
     }
     return success;
   };
+
   const handleOutlookConnect = async () => {
     setIsConnectingOutlook(true);
     const result = await outlook.connect();
-    if (!result.success) {
+    // Agar result success hai, user redirect ho chuka hoga
+    if (result && !result.success) {
       setIsConnectingOutlook(false);
       toast.error(result.error || "Error connecting to Outlook");
     }
-    // If success, user will be redirected to Microsoft login
   };
+
   const handleDownload = () => {
     console.log("Downloading Excel file...");
     toast.success("Download started!");
   };
+
   const handleManageSubscription = async () => {
     const result = await quotas.openCustomerPortal();
     if (!result.success) {
-      // If test mode, show info message
       if (result.error?.includes("mode test")) {
         toast.info(result.error);
       } else if (result.error?.includes("Aucun abonnement")) {
-        // Redirect to pricing section
         router.push("/#pricing");
       } else {
         toast.error(result.error || "Error opening portal");
       }
     }
   };
-  if (isAuthLoading || quotas.isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">
-            {isAuthLoading ? "Verifying authentication..." : "Loading your subscription..."}
-          </p>
-        </div>
-      </div>
-    );
-  }
-  // If not subscribed, show message
-  if (!quotas.isSubscribed) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="max-w-md text-center space-y-4 p-6">
-          <h1 className="text-2xl font-bold text-foreground">No Active Subscription</h1>
-          <p className="text-muted-foreground">
-            You don't have an active subscription. Choose a plan to start using Inbox2Excel.
-          </p>
-          <div className="flex gap-3 justify-center">
-            <Button onClick={() => router.push("/auth")}>
-              <TrendingUp className="h-4 w-4 mr-2" />
-              Choose a Plan
-            </Button>
-            <Button variant="outline" onClick={handleLogout}>
-              <LogOut className="h-4 w-4 mr-2" />
-              Log Out
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+
+  // Loading States
+  // if (status === "loading" || quotas.isLoading) {
+  //   return (
+  //     <div className="min-h-screen bg-background flex items-center justify-center">
+  //       <div className="flex flex-col items-center gap-3">
+  //         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+  //         <p className="text-sm text-muted-foreground">
+  //           {status === "loading" ? "Verifying authentication..." : "Loading your subscription..."}
+  //         </p>
+  //       </div>
+  //     </div>
+  //   );
+  // }
+
+  // If not subscribed logic
+  // if (!quotas.isSubscribed) {
+  //   return (
+  //     <div className="min-h-screen bg-background flex items-center justify-center">
+  //       <div className="max-w-md text-center space-y-4 p-6">
+  //         <h1 className="text-2xl font-bold text-foreground">No Active Subscription</h1>
+  //         <p className="text-muted-foreground">
+  //           You don't have an active subscription. Choose a plan to start using Inbox2Excel.
+  //         </p>
+  //         <div className="flex gap-3 justify-center">
+  //           <Button onClick={() => router.push("/#pricing")}>
+  //             <TrendingUp className="h-4 w-4 mr-2" />
+  //             Choose a Plan
+  //           </Button>
+  //           <Button variant="outline" onClick={handleLogout}>
+  //             <LogOut className="h-4 w-4 mr-2" />
+  //             Log Out
+  //           </Button>
+  //         </div>
+  //       </div>
+  //     </div>
+  //   );
+  // }
+
+
+  console.log("outlook", outlook);
+
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="bg-card border-b border-border sticky top-0 z-50">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
-            {/* Logo */}
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                 <span className="text-primary-foreground font-bold text-sm">I2E</span>
               </div>
               <span className="font-semibold text-lg text-foreground">Inbox2Excel</span>
             </div>
-            {/* Actions */}
+
             <div className="flex items-center gap-3">
-              {/* Statut Outlook */}
+              {/* Outlook Status */}
               {outlook.isConnected ? (
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-success/10 text-success">
-                  <div className="w-2 h-2 rounded-full bg-success" />
-                  {outlook.email ? `Outlook (${outlook.email})` : "Outlook connected"}
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-green-500/10 text-green-600 border border-green-200">
+                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  {outlook.email ? `Outlook Connected` : "Connected"}
                 </div>
-              ) : outlook.isExpired ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowConnectModal(true)}
-                  className="gap-2 border-warning text-warning"
-                >
-                  <div className="w-2 h-2 rounded-full bg-warning" />
-                  Reconnect Outlook
-                </Button>
               ) : (
                 <Button
                   variant="outline"
@@ -209,16 +227,23 @@ export default function Dashboard() {
                   Connect to Outlook
                 </Button>
               )}
-              {/* Menu utilisateur */}
+
+              {/* User Menu */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="gap-2">
-                    <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                  <Button variant="ghost" size="sm" className="gap-2 p-0 h-8 w-8 rounded-full overflow-hidden border">
+                    {session?.user?.image ? (
+                      <img src={session.user.image} alt="User" className="w-full h-full object-cover" />
+                    ) : (
                       <User className="h-4 w-4 text-primary" />
-                    </div>
+                    )}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem className="font-medium text-xs text-muted-foreground px-2 py-1.5 opacity-70">
+                    {session?.user?.email}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => router.push("/account")}>
                     <User className="h-4 w-4 mr-2" />
                     My Account
@@ -228,15 +253,19 @@ export default function Dashboard() {
                     <LogOut className="h-4 w-4 mr-2" />
                     Log Out
                   </DropdownMenuItem>
+
+                  <DropdownMenuItem className="text-destructive" onClick={handleDisconnect}>
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Log Out Outlook
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
           </div>
         </div>
       </header>
-      {/* Main content */}
+
       <main className="container mx-auto px-4 py-6 space-y-6">
-        {/* Subscription Status Bar */}
         <SubscriptionStatus
           planName={quotas.planName}
           extractionsUsed={quotas.extractionsUsedThisMonth}
@@ -245,16 +274,15 @@ export default function Dashboard() {
           onUpgrade={handleManageSubscription}
           onRefresh={quotas.refreshSubscription}
         />
-        {/* Alert si limite atteinte */}
+
         <ExtractionLimitAlert
           isMonthlyLimitReached={quotas.isMonthlyLimitReached}
           monthlyLimit={quotas.limits.extractionsPerMonth}
           nextPlanName={quotas.nextPlanName}
           onUpgrade={handleManageSubscription}
         />
-        {/* 2-column layout */}
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Colonne gauche - Filtres */}
           <div className="lg:col-span-4 space-y-4">
             <FiltersSidebar
               plan={quotas.plan || "starter"}
@@ -270,35 +298,32 @@ export default function Dashboard() {
               savedFilters={quotas.savedFilters}
               onDeleteFilter={async (id) => {
                 const success = await quotas.deleteFilter(id);
-                if (success) {
-                  toast.success("Filter deleted");
-                } else {
-                  toast.error("Error deleting filter");
-                }
+                if (success) toast.success("Filter deleted");
+                else toast.error("Error deleting filter");
               }}
               onLoadFilter={(filter) => {
                 toast.success(`Filter "${filter.name}" loaded`);
               }}
             />
           </div>
-          {/* Colonne droite - Export */}
+
           <div className="lg:col-span-8 space-y-4">
-            {/* Export Panel */}
             <ExportPanel
               hasExtracted={hasExtracted}
-              rowCount={5}
+              rowCount={extractedData.length || 0}
               onDownload={handleDownload}
             />
           </div>
         </div>
       </main>
-      {/* Modals */}
+
       <OutlookConnectModal
         open={showConnectModal}
         onOpenChange={setShowConnectModal}
         onConnect={handleOutlookConnect}
         isConnecting={isConnectingOutlook}
       />
+
       <SaveFilterModal
         open={showSaveFilterModal}
         onOpenChange={setShowSaveFilterModal}
@@ -307,7 +332,7 @@ export default function Dashboard() {
         savedFiltersCount={quotas.savedFiltersCount}
         maxFilters={quotas.limits.maxFilters}
         nextPlanName={quotas.nextPlanName}
-        blockedMessage={quotas.getFilterBlockedMessage()}
+        // blockedMessage={quotas.getFilterBlockedMessage()}
       />
     </div>
   );

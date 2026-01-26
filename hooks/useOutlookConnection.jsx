@@ -1,130 +1,95 @@
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useSession } from "next-auth/react";
 
 export function useOutlookConnection() {
+  const { data: session, status } = useSession();
+
   const [isLoading, setIsLoading] = useState(true);
   const [connection, setConnection] = useState({
     connected: false,
     email: null,
     displayName: null,
+    connectedAt: null,
   });
   const [error, setError] = useState(null);
 
-  // Check if user is connected via Azure provider
+  // 🔍 Check Outlook connection from backend
   const checkConnection = useCallback(async () => {
     try {
       setError(null);
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        setConnection({ connected: false, email: null, displayName: null });
+
+      if (!session?.user) {
+        setConnection({
+          connected: false,
+          email: null,
+          displayName: null,
+          connectedAt: null,
+        });
         return;
       }
 
-      // Azure provider check (don't forget azure_ad if azure doesn't work)
-      const provider = session.user.app_metadata?.provider;
-      const providers = session.user.app_metadata?.providers || [];
-      
-      const isAzureConnected = provider === "azure" || providers.includes("azure");
-      
-      console.log("[Outlook] Session check:", { 
-        provider, 
-        providers, 
-        isAzureConnected,
-        email: session.user.email 
+      const res = await fetch("/api/outlook/status");
+      if (!res.ok) throw new Error("Failed to fetch Outlook status");
+
+      const data = await res.json();
+
+      setConnection({
+        connected: data.connected,
+        email: data?.data?.email || null,
+        displayName: data?.data?.displayName || null,
+        connectedAt: data?.data?.connectedAt || null,
       });
-      
-      if (isAzureConnected) {
-        setConnection({
-          connected: true,
-          email: session.user.email || null,
-          displayName: session.user.user_metadata?.full_name || session.user.user_metadata?.name || null,
-        });
-      } else {
-        setConnection({ connected: false, email: null, displayName: null });
-      }
     } catch (err) {
-      console.error("[Outlook] Error checking connection:", err);
-      setError("Erreur lors de la vérification de la connexion");
+      console.error("[Outlook] Status check error:", err);
+      setError("Failed to check Outlook connection");
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [session]);
 
-  // Initial check + listen for auth changes
+  // Initial load + session change
   useEffect(() => {
-    checkConnection();
+    if (status !== "loading") {
+      checkConnection();
+    }
+  }, [status, checkConnection]);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log("[Outlook] Auth state changed:", event);
-      
-      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
-        checkConnection();
-      } else if (event === "SIGNED_OUT") {
-        setConnection({ connected: false, email: null, displayName: null });
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [checkConnection]);
-
-  // Connect to Outlook via Supabase Auth Azure provider
-  const connect = useCallback(async () => {
+  // 🔗 Start Outlook OAuth (custom flow)
+  const connect = useCallback(() => {
     try {
       setError(null);
-      console.log("[Outlook] Starting Azure OAuth flow...");
-      
-      const { data, error: authError } = await supabase.auth.signInWithOAuth({
-        provider: "azure",
-        options: {
-          // offline_access is important for refreshing tokens
-          scopes: "openid profile email offline_access Mail.Read User.Read",
-          redirectTo: `${window.location.origin}/dashboard`,
-        },
-      });
-      
-      if (authError) {
-        console.error("[Outlook] OAuth error:", authError);
-        
-        if (authError.message.includes("provider is not enabled")) {
-          return { 
-            success: false, 
-            error: "Le provider Azure n'est pas activé. Veuillez configurer Supabase Dashboard." 
-          };
-        }
-        
-        return { success: false, error: authError.message };
-      }
 
-      console.log("[Outlook] OAuth initiated, redirecting to Microsoft...", data);
+      // Backend route jo Microsoft OAuth start kare
+      window.location.href = "/api/outlook/connect";
+
       return { success: true };
     } catch (err) {
-      console.error("[Outlook] Unexpected error:", err);
+      console.error("[Outlook] Connect error:", err);
       return { success: false, error: err.message };
     }
   }, []);
 
-  // Disconnect from Outlook
+  // ❌ Disconnect Outlook
   const disconnect = useCallback(async () => {
     try {
-      console.log("[Outlook] Signing out...");
-      const { error: signOutError } = await supabase.auth.signOut();
-      
-      if (signOutError) {
-        console.error("[Outlook] Sign out error:", signOutError);
-        return { success: false, error: signOutError.message };
-      }
+      setError(null);
+
+      const res = await fetch("/api/outlook/disconnect", {
+        method: "POST",
+      });
+
+      if (!res.ok) throw new Error("Failed to disconnect Outlook");
 
       setConnection({
         connected: false,
         email: null,
         displayName: null,
+        connectedAt: null,
       });
 
-      console.log("[Outlook] Successfully signed out");
       return { success: true };
     } catch (err) {
-      console.error("[Outlook] Unexpected sign out error:", err);
+      console.error("[Outlook] Disconnect error:", err);
       return { success: false, error: err.message };
     }
   }, []);
@@ -133,10 +98,10 @@ export function useOutlookConnection() {
     isLoading,
     error,
     isConnected: connection.connected,
-    isExpired: false, 
+    isExpired: false, // tum refresh-token logic baad me laga sakte ho
     email: connection.email,
     displayName: connection.displayName,
-    connectedAt: null,
+    connectedAt: connection.connectedAt,
     connect,
     disconnect,
     refresh: checkConnection,
