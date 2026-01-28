@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useSession, signOut } from "next-auth/react"; // NextAuth hooks
+import { useSession, signOut } from "next-auth/react"; 
 import { Button } from "@/components/ui/button";
 import { LogOut, User, Loader2, TrendingUp } from "lucide-react";
 import { useSubscriptionQuotas } from "@/hooks/useSubscriptionQuotas";
@@ -24,7 +24,7 @@ import { toast } from "sonner";
 
 export default function Dashboard() {
   const router = useRouter();
-  const { data: session, status } = useSession(); // NextAuth Session
+  const { data: session, status } = useSession();
 
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [showSaveFilterModal, setShowSaveFilterModal] = useState(false);
@@ -45,9 +45,10 @@ export default function Dashboard() {
     }
   }, [status, router]);
 
-  const handleLogout = async () => {
-    await signOut({ callbackUrl: "/" });
-  };
+ const handleLogout = async () => {
+  await signOut({ redirect: false });
+  router.refresh(); 
+};
 
 
   const handleDisconnect = async () => {
@@ -90,16 +91,19 @@ export default function Dashboard() {
 
       const result = await response.json();
 
+      console.log("result", result);
+      
+
       if (!response.ok) {
         throw new Error(result.error || "Failed to extract data");
       }
-        setExtractedData(result.results || []);
-        toast.success(`Success! Extracted data from ${result.results?.length || 0} emails.`);
+      setExtractedData(result.results || []);
+      toast.success(`Success! Extracted data from ${result.results?.length || 0} emails.`);
+        setHasExtracted(true);
 
       // const quotaResult = await quotas.consumeExtraction();
 
       // if (quotaResult.success) {
-      //   setHasExtracted(true);
       // } else {
       //   toast.error("Quota update failed, but data was fetched.");
       // }
@@ -195,6 +199,7 @@ export default function Dashboard() {
 
 
   console.log("outlook", outlook);
+  console.log("extractedData", extractedData);
 
 
   return (
@@ -310,8 +315,9 @@ export default function Dashboard() {
           <div className="lg:col-span-8 space-y-4">
             <ExportPanel
               hasExtracted={hasExtracted}
-              rowCount={extractedData.length || 0}
-              onDownload={handleDownload}
+              rowCount={extractedData.length} // result.results.length
+              extractedData={extractedData}  // Poora array
+              // onDownload={handleDownloadExcel} // Excel generate karne wala function
             />
           </div>
         </div>
@@ -332,7 +338,7 @@ export default function Dashboard() {
         savedFiltersCount={quotas.savedFiltersCount}
         maxFilters={quotas.limits.maxFilters}
         nextPlanName={quotas.nextPlanName}
-        // blockedMessage={quotas.getFilterBlockedMessage()}
+      // blockedMessage={quotas.getFilterBlockedMessage()}
       />
     </div>
   );

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import * as yup from "yup";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,6 +55,42 @@ export default function FiltersSidebar({
     { id: "1", extractType: "after", searchText: "", endType: "word" },
   ]);
 
+  // Yup validation schema
+  const schema = yup.object().shape({
+    subject: yup.string().optional(),
+    sender: yup.string().optional(), // Explicitly optional as requested
+    startDate: yup.date().nullable().optional(),
+    endDate: yup.date().nullable().optional(),
+    extractionRules: yup
+      .array()
+      .of(
+        yup.object().shape({
+          extractType: yup.string().oneOf(["after", "before"]).required("Extract type is required"),
+          searchText: yup.string().trim().required("Keyword is required"),
+          endType: yup.string().oneOf(["word", "line", "paragraph"]).required("End type is required"),
+        })
+      )
+      .min(1, "At least one extraction rule is required")
+      .required(),
+  });
+
+  // Function to check if form is valid synchronously
+  const isFormValid = () => {
+    const formData = {
+      subject,
+      sender,
+      startDate: startDate || null,
+      endDate: endDate || null,
+      extractionRules,
+    };
+    try {
+      schema.validateSync(formData, { abortEarly: false });
+      return true;
+    } catch (error) {
+      return false;
+    }
+  };
+
   const canAddMore = extractionRules.length < maxFieldsPerFilter;
 
   const addExtractionRule = () => {
@@ -82,8 +119,8 @@ export default function FiltersSidebar({
 
   // --- Actions ---
 
-  const handleSaveFilter = () => {
-    if (!canSaveFilter) return;
+  const handleSaveFilter = async () => {
+    if (!canSaveFilter || !isFormValid()) return;
     const filterData = {
       subject,
       sender,
@@ -94,8 +131,12 @@ export default function FiltersSidebar({
     onSaveFilter(filterData);
   };
 
-  const handleExtractClick = () => {
-    // Mukammal payload jo backend API receive karegi
+  const handleExtractClick = async () => {
+    if (!isFormValid()) {
+      // Optional: You can add error handling here, like showing a toast
+      console.error("Form validation failed");
+      return;
+    }
     const payload = {
       subject,
       sender,
@@ -122,7 +163,6 @@ export default function FiltersSidebar({
   return (
     <div className="bg-card border border-border rounded-lg shadow-card h-full flex flex-col overflow-hidden">
       
-      {/* 1. Saved Filters Dropdown */}
       {savedFilters.length > 0 && (
         <div className="p-4 border-b border-border">
           <DropdownMenu>
@@ -163,7 +203,6 @@ export default function FiltersSidebar({
         </div>
       )}
 
-      {/* 2. Email Search Header */}
       <div className="p-4 border-b border-border bg-muted/20">
         <div className="flex items-center gap-2 text-accent">
           <Search className="h-5 w-5" />
@@ -176,7 +215,6 @@ export default function FiltersSidebar({
 
       <div className="flex-1 overflow-y-auto p-4 space-y-5 custom-scrollbar">
         
-        {/* Subject Input */}
         <div className="space-y-2">
           <Label htmlFor="subject" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Subject Keyword
@@ -190,7 +228,6 @@ export default function FiltersSidebar({
           />
         </div>
 
-        {/* Sender Input */}
         <div className="space-y-2">
           <Label htmlFor="sender" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Sender Address
@@ -204,7 +241,6 @@ export default function FiltersSidebar({
           />
         </div>
 
-        {/* Date Range Selectors */}
         <div className="space-y-2">
           <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
             <CalendarIcon className="h-3 w-3" /> Date Range
@@ -234,7 +270,6 @@ export default function FiltersSidebar({
           </div>
         </div>
 
-        {/* 3. Extract Data Section */}
         <div className="pt-4 border-t border-border">
           <div className="flex items-center gap-2 text-accent mb-4">
             <Database className="h-5 w-5" />
@@ -300,7 +335,6 @@ export default function FiltersSidebar({
               </div>
             ))}
 
-            {/* Quota-aware Add Button */}
             <div className="pt-2">
               {canAddMore ? (
                 <Button variant="outline" size="sm" className="w-full border-dashed border-accent/50 text-accent hover:bg-accent/5" onClick={addExtractionRule}>
@@ -323,47 +357,23 @@ export default function FiltersSidebar({
         </div>
       </div>
 
-      {/* 4. Sticky Footer Actions */}
       <div className="p-4 border-t border-border bg-background space-y-3">
         <Button
           variant="ghost"
           size="sm"
           className="w-full text-muted-foreground hover:text-accent"
           onClick={handleSaveFilter}
-          disabled={!canSaveFilter || extractionRules[0].searchText === ""}
+          disabled={!canSaveFilter || !isFormValid()}
         >
           <Save className="h-4 w-4 mr-2" /> Save this configuration
         </Button>
-
-        {/* <Button
-          size="xl"
-          variant="hero"
-          className="w-full shadow-lg"
-          onClick={handleExtractClick}
-          disabled={isExtracting || isQuotaReached || extractionRules[0].searchText === ""}
-        >
-          {isExtracting ? (
-            <span className="flex items-center gap-2">
-              <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Processing...
-            </span>
-          ) : isQuotaReached ? (
-            "Quota Reached"
-          ) : (
-            <>
-              <Play className="h-5 w-5 mr-2" /> Run Extraction
-            </>
-          )}
-        </Button> */}
-
-
 
         <Button
           size="xl"
           variant="hero"
           className="w-full shadow-lg"
           onClick={handleExtractClick}
-          disabled={isExtracting || extractionRules[0].searchText === ""}
+          disabled={isExtracting || !isFormValid()}
         >
           {isExtracting ? (
             <span className="flex items-center gap-2">

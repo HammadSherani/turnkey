@@ -17,46 +17,71 @@ export async function POST(req) {
 
     if (!account) return NextResponse.json({ error: "Connect Outlook first" }, { status: 400 });
 
-    // 1. Microsoft Graph Query Build Karein
+    // --- Build Dynamic OData Filter ---
     let filters = [];
-    if (subject) filters.push(`contains(subject, '${subject}')`);
-    if (sender) filters.push(`from/emailAddress/address eq '${sender}'`);
+    
+    // Sirf wahi filters add honge jo user ne provide kiye hain
+    if (subject && subject.trim() !== "") {
+      filters.push(`contains(subject, '${subject.replace(/'/g, "''")}')`);
+    }
+    
+    if (sender && sender.trim() !== "") {
+      // Agar user @domain likhay ya full email, dono handle honge
+      filters.push(`contains(from/emailAddress/address, '${sender.replace(/'/g, "''")}')`);
+    }
+    
     if (startDate) filters.push(`receivedDateTime ge ${startDate}`);
     if (endDate) filters.push(`receivedDateTime le ${endDate}`);
 
+    // Graph API params
+    const queryParams = {
+      "$select": "subject,body,receivedDateTime,from",
+      "$top": 50 // Safety limit taake timeout na ho
+    };
+
+    // Agar koi filter hai tabhi $filter param add karein
+    if (filters.length > 0) {
+      queryParams["$filter"] = filters.join(" and ");
+    }
+
     const response = await axios.get("https://graph.microsoft.com/v1.0/me/messages", {
       headers: { Authorization: `Bearer ${account.accessToken}` },
-      params: { 
-        "$filter": filters.join(" and "),
-        "$select": "subject,body,receivedDateTime" 
-      }
+      params: queryParams
     });
 
     const emails = response.data.value;
 
-    // 2. Extraction Logic (Regex)
+    // --- Extraction Logic ---
     const results = emails.map(email => {
       let extractedFields = {};
-      const bodyContent = email.body.content.replace(/<[^>]*>/g, ' '); // HTML tags saaf karna
+      // Plain text conversion
+      const bodyContent = email.body.content.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ');
 
-      extractionRules.forEach((rule, index) => {
-        let regex;
-        const key = rule.keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Escape special chars
+      if (extractionRules && Array.isArray(extractionRules)) {
+        extractionRules.forEach((rule, index) => {
+          if (!rule.keyword || rule.keyword.trim() === "") {
+            extractedFields[`field_${index + 1}`] = "No Keyword Provided";
+            return;
+          }
 
-        if (rule.type === "after") {
-          // Word: pehla lafz, Line: puri line, Paragraph: do newlines tak
-          const boundary = rule.boundary === "word" ? "\\S+" : rule.boundary === "line" ? ".*" : "[\\s\\S]*?\\n\\n";
-          regex = new RegExp(`${key}\\s*(${boundary})`, "i");
-        } else {
-          regex = new RegExp(`(\\S+)\\s*${key}`, "i");
-        }
+          const key = rule.keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          let regex;
 
-        const match = bodyContent.match(regex);
-        extractedFields[`field_${index + 1}`] = match ? match[1].trim() : "Not Found";
-      });
+          if (rule.type === "after") {
+            const boundary = rule.boundary === "word" ? "\\S+" : rule.boundary === "line" ? ".*" : "[\\s\\S]*?\\n\\n";
+            regex = new RegExp(`${key}\\s*(${boundary})`, "i");
+          } else {
+            regex = new RegExp(`(\\S+)\\s*${key}`, "i");
+          }
+
+          const match = bodyContent.match(regex);
+          extractedFields[`field_${index + 1}`] = match ? match[1].trim() : "Not Found";
+        });
+      }
 
       return {
         subject: email.subject,
+        sender: email.from?.emailAddress?.address,
         date: email.receivedDateTime,
         extractedData: extractedFields
       };
@@ -65,7 +90,10 @@ export async function POST(req) {
     return NextResponse.json({ success: true, results });
 
   } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "Extraction failed" }, { status: 500 });
+    console.error("Extraction API Error:", error.response?.data || error.message);
+    return NextResponse.json(
+      { error: error.response?.data?.error?.message || "Extraction failed" }, 
+      { status: 500 }
+    );
   }
 }

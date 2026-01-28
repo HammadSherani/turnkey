@@ -113,9 +113,9 @@ export default function AuthPage() {
       console.log("✅ User registered:", regData);
 
       // 2. Create Stripe Session
-      const stripeRes = await fetch("/api/checkout", {
+      const stripeRes = await fetch("/api/stripe/checkout", {
         method: "POST",
-        body: JSON.stringify({ email, planId: selectedPlan }),
+        body: JSON.stringify({ email }),
         headers: { "Content-Type": "application/json" }
       });
 
@@ -209,7 +209,7 @@ export default function AuthPage() {
   if(session) {
     router.push("/dashboard");
   }
-
+  
   if (currentView === "planSelection") {
     return (
       <div className="min-h-screen bg-background py-12 px-4">
