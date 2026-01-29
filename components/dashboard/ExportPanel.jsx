@@ -17,7 +17,7 @@ export default function ExportPanel({
     const worksheetData = extractedData.map(item => ({
       "Subject": item.subject,
       "Sender": item.sender || "N/A",
-      "Date": new Date(item.date).toLocaleString(),
+      "Date": new Date(item.date)?.toLocaleString(),
       ...item.extractedData 
     }));
 

@@ -23,7 +23,7 @@ export default function ExtractionLimitAlert({
             <p className="text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
                 <Calendar className="h-4 w-4" />
-                You have reached your quota of {monthlyLimit.toLocaleString()} extractions this month.
+                You have reached your quota of {monthlyLimit?.toLocaleString()} extractions this month.
                 Quotas reset automatically each month.
               </span>
             </p>

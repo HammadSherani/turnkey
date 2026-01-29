@@ -2,32 +2,38 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
+import { useSession } from "next-auth/react";
 
+// Updated limits based on your provided package details
 const DEFAULT_LIMITS = {
-  starter: { extractionsPerMonth: 500, maxFilters: 2, maxFieldsPerFilter: 2 },
-  pro: { extractionsPerMonth: 2500, maxFilters: 5, maxFieldsPerFilter: 5 },
-  prime: { extractionsPerMonth: 10000, maxFilters: 10, maxFieldsPerFilter: 10 },
+  STARTER: { extractionsPerMonth: 1500, maxFilters: 2, maxFieldsPerFilter: 2 },
+  PRO: { extractionsPerMonth: 7500, maxFilters: 5, maxFieldsPerFilter: 5 },
+  PRIME: { extractionsPerMonth: 25000, maxFilters: 10, maxFieldsPerFilter: 10 },
+  FREE: { extractionsPerMonth: 0, maxFilters: 0, maxFieldsPerFilter: 0 },
 };
 
 const PLAN_NAMES = {
-  starter: "Starter",
-  pro: "Pro",
-  prime: "Prime",
+  STARTER: "Starter",
+  PRO: "Pro",
+  PRIME: "Prime",
+  FREE: "Free Plan",
 };
 
 const PLAN_PRICES = {
-  starter: 20,
-  pro: 40,
-  prime: 70,
+  STARTER: 14.99,
+  PRO: 29.99,
+  PRIME: 59.99,
+  FREE: 0,
 };
 
 const NEXT_PLAN = {
-  starter: "pro",
-  pro: "prime",
-  prime: null,
+  STARTER: "PRO",
+  PRO: "PRIME",
+  PRIME: null,
 };
 
 export function useSubscriptionQuotas() {
+  const { data: session, update: updateSession } = useSession();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [subscriptionData, setSubscriptionData] = useState(null);
@@ -44,11 +50,20 @@ export function useSubscriptionQuotas() {
       setSubscriptionData(data);
     } catch (err) {
       console.error("Subscription Fetch Error:", err);
+      // Fallback: Agar API fail ho jaye to session ka data use karein
+      if (session?.user) {
+        setSubscriptionData({
+          plan: session.user.plan,
+          paymentStatus: session.user.paymentStatus,
+          limits: session.user.limits,
+          usage: { extractionsCount: session.user.extractionsUsed }
+        });
+      }
       setError("Failed to load subscription data");
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [session]);
 
   const fetchSavedFilters = useCallback(async () => {
     try {
@@ -56,18 +71,11 @@ export function useSubscriptionQuotas() {
       if (!response.ok) throw new Error("Failed to fetch filters");
       
       const data = await response.json();
-      
       const formattedFilters = (data.filters || []).map((f) => ({
         id: f._id || f.id,
         name: f.name,
         createdAt: new Date(f.createdAt),
-        data: {
-          subject: f.subject || "",
-          sender: f.sender || "",
-          startDate: f.startDate ? new Date(f.startDate) : undefined,
-          endDate: f.endDate ? new Date(f.endDate) : undefined,
-          extractionRules: f.extractionRules || [],
-        },
+        data: f.data || {},
       }));
       setSavedFilters(formattedFilters);
     } catch (err) {
@@ -76,27 +84,32 @@ export function useSubscriptionQuotas() {
   }, []);
 
   useEffect(() => {
-    fetchSubscription();
-    fetchSavedFilters();
-  }, [fetchSubscription, fetchSavedFilters]);
+    if (session) {
+      fetchSubscription();
+      fetchSavedFilters();
+    }
+  }, [session, fetchSubscription, fetchSavedFilters]);
 
-  const plan = subscriptionData?.plan || "starter";
-  const isSubscribed = subscriptionData?.isSubscribed || false;
-  const limits = subscriptionData?.limits || DEFAULT_LIMITS[plan];
+  // Priority: 1. API Data, 2. Session Data, 3. Default (FREE)
+  const plan = (subscriptionData?.plan || session?.user?.plan || "FREE").toUpperCase();
+  const paymentStatus = subscriptionData?.paymentStatus || session?.user?.paymentStatus || "pending";
+  const isSubscribed = paymentStatus === "active";
   
-  const extractionsUsedThisMonth = subscriptionData?.usage?.extractionsCount || 0;
+  const limits = session?.user?.limits ;
+  
+  const extractionsUsedThisMonth = subscriptionData?.usage?.extractionsCount || session?.user?.extractionsUsed || 0;
   const savedFiltersCount = savedFilters.length;
   
-  const planName = PLAN_NAMES[plan];
-  const planPrice = PLAN_PRICES[plan];
+  const planName = PLAN_NAMES[plan] || plan;
+  const planPrice = PLAN_PRICES[plan] || 0;
   const nextPlan = NEXT_PLAN[plan];
   const nextPlanName = nextPlan ? PLAN_NAMES[nextPlan] : null;
 
-  const canExtract = isSubscribed && extractionsUsedThisMonth < limits.extractionsPerMonth;
-  const isMonthlyLimitReached = extractionsUsedThisMonth >= limits.extractionsPerMonth;
+  const canExtract = isSubscribed && extractionsUsedThisMonth < limits.extractions;
+  const isMonthlyLimitReached = extractionsUsedThisMonth >= limits?.extractions;
   
-  const canSaveFilter = savedFiltersCount < limits.maxFilters;
-  const filtersRemaining = Math.max(0, limits.maxFilters - savedFiltersCount);
+  const canSaveFilter = savedFiltersCount < limits?.filters;
+  const filtersRemaining = Math.max(0, limits?.filters - savedFiltersCount);
 
   const consumeExtraction = useCallback(async () => {
     try {
@@ -106,22 +119,21 @@ export function useSubscriptionQuotas() {
       if (data.success) {
         setSubscriptionData(prev => ({
           ...prev,
-          usage: {
-            ...prev.usage,
-            extractionsCount: data.newCount
-          }
+          usage: { ...prev?.usage, extractionsCount: data.newCount }
         }));
+        // Update NextAuth session to keep it in sync
+        updateSession(); 
         return { success: true };
       }
       return { success: false, error: data.error };
     } catch (err) {
       return { success: false, error: err.message };
     }
-  }, []);
+  }, [updateSession]);
 
   const saveFilter = useCallback(async (name, filterData) => {
     if (!canSaveFilter) {
-      toast.error("Limit reached! Upgrade your plan to save more filters.");
+      toast.error(`Limite atteinte ! Passez au plan ${nextPlanName || 'supérieur'} pour enregistrer plus de filtres.`);
       return false;
     }
 
@@ -135,7 +147,6 @@ export function useSubscriptionQuotas() {
       if (!response.ok) throw new Error("Failed to save filter");
       
       const newFilter = await response.json();
-      
       setSavedFilters(prev => [{
         id: newFilter.id,
         name: newFilter.name,
@@ -143,21 +154,21 @@ export function useSubscriptionQuotas() {
         data: filterData,
       }, ...prev]);
       
-      toast.success("Filter saved successfully!");
+      toast.success("Filtre enregistré !");
       return true;
     } catch (err) {
-      console.error("Save Filter Error:", err);
+      console.error("Save Error:", err);
+      toast.error("Erreur lors de l'enregistrement");
       return false;
     }
-  }, [canSaveFilter]);
+  }, [canSaveFilter, nextPlanName]);
 
   const deleteFilter = useCallback(async (filterId) => {
     try {
       const response = await fetch(`/api/filters/${filterId}`, { method: "DELETE" });
-      
       if (response.ok) {
         setSavedFilters(prev => prev.filter(f => f.id !== filterId));
-        toast.success("Filter deleted");
+        toast.success("Filtre supprimé");
         return true;
       }
       return false;
@@ -175,16 +186,17 @@ export function useSubscriptionQuotas() {
         window.location.href = data.url;
         return { success: true };
       }
-      return { success: false, error: "Portal unavailable" };
+      return { success: false, error: "Portail indisponible" };
     } catch (err) {
       return { success: false, error: err.message };
     }
   }, []);
 
   return {
-    isLoading,
+    isLoading: isLoading && !session,
     error,
     isSubscribed,
+    paymentStatus,
     plan,
     planName,
     planPrice,
@@ -198,7 +210,7 @@ export function useSubscriptionQuotas() {
     savedFilters,
     canSaveFilter,
     filtersRemaining,
-    maxFieldsPerFilter: limits.maxFieldsPerFilter,
+    maxFieldsPerFilter: limits?.fields,
     consumeExtraction,
     saveFilter,
     deleteFilter,
