@@ -182,9 +182,9 @@ export default function AuthPage() {
   };
 
 
-  // if (session) {
-  //   router.push("/dashboard");
-  // }
+  if (session) {
+    router.push("/dashboard");
+  }
 
   if (currentView === "planSelection") {
     return (
