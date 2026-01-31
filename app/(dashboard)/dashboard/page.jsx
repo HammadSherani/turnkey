@@ -130,8 +130,10 @@ export default function Dashboard() {
   };
 
   const handleManageSubscription = async () => {
-    const result = await quotas.openCustomerPortal();
-    if (!result.success) router.push("/#pricing");
+    console.log("clicked");
+    
+    // const result = await quotas.openCustomerPortal();
+    // if (!result.success) router.push("/#pricing");
   };
 
   // 2. Loading State
@@ -201,7 +203,7 @@ export default function Dashboard() {
   }
 
   // 4. Main Dashboard View (Only if Paid)
-  const usagePercent = Math.min(100, (quotas.extractionsUsedThisMonth / quotas?.limits?.extractionsPerMonth) * 100);
+  const usagePercent = Math.min(100, (quotas.extractionsUsedThisMonth / quotas?.limits?.extractions) * 100);
 
   return (
     <div className="min-h-screen bg-background">
