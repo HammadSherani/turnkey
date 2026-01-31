@@ -179,7 +179,7 @@ export default function Dashboard() {
           <div className="flex flex-col gap-3">
             <Button 
               className="w-full bg-primary hover:bg-primary/90 h-12 text-base font-semibold"
-              onClick={() => window.location.href = selectedPlan.stripeUrl}
+              onClick={() => window.location.href = `${selectedPlan.stripeUrl}?client_reference_id=${session.user.id}`}
             >
               Compléter le paiement ({selectedPlan.price}€)
             </Button>
@@ -199,7 +199,7 @@ export default function Dashboard() {
   }
 
   // 4. Main Dashboard View (Only if Paid)
-  const usagePercent = Math.min(100, (quotas.extractionsUsedThisMonth / quotas.limits.extractionsPerMonth) * 100);
+  const usagePercent = Math.min(100, (quotas.extractionsUsedThisMonth / quotas?.limits?.extractionsPerMonth) * 100);
 
   return (
     <div className="min-h-screen bg-background">
@@ -253,7 +253,7 @@ export default function Dashboard() {
         <SubscriptionStatus
           planName={quotas.planName}
           extractionsUsed={quotas.extractionsUsedThisMonth}
-          extractionsLimit={quotas.limits.extractionsPerMonth}
+          extractionsLimit={quotas?.limits?.extractionsPerMonth}
           monthlyUsagePercent={usagePercent}
           onUpgrade={handleManageSubscription}
           onRefresh={quotas.refreshSubscription}
@@ -261,7 +261,7 @@ export default function Dashboard() {
 
         <ExtractionLimitAlert
           isMonthlyLimitReached={quotas.isMonthlyLimitReached}
-          monthlyLimit={quotas.limits.extractionsPerMonth}
+          monthlyLimit={quotas?.limits?.extractionsPerMonth}
           nextPlanName={quotas.nextPlanName}
           onUpgrade={handleManageSubscription}
         />
@@ -278,7 +278,7 @@ export default function Dashboard() {
               onSaveFilter={handleOpenSaveModal}
               canSaveFilter={quotas.canSaveFilter}
               savedFiltersCount={quotas.savedFiltersCount}
-              maxFilters={quotas.limits.maxFilters}
+              maxFilters={quotas?.limits?.maxFilters}
               savedFilters={quotas.savedFilters}
               onDeleteFilter={(id) => quotas.deleteFilter(id)}
               onLoadFilter={(f) => toast.success(`Filtre ${f.name} chargé`)}
@@ -296,7 +296,7 @@ export default function Dashboard() {
       </main>
 
       <OutlookConnectModal open={showConnectModal} onOpenChange={setShowConnectModal} onConnect={handleOutlookConnect} isConnecting={isConnectingOutlook} />
-      <SaveFilterModal open={showSaveFilterModal} onOpenChange={setShowSaveFilterModal} onSave={handleSaveFilter} canSave={quotas.canSaveFilter} savedFiltersCount={quotas.savedFiltersCount} maxFilters={quotas.limits.maxFilters} nextPlanName={quotas.nextPlanName} />
+      <SaveFilterModal open={showSaveFilterModal} onOpenChange={setShowSaveFilterModal} onSave={handleSaveFilter} canSave={quotas.canSaveFilter} savedFiltersCount={quotas.savedFiltersCount} maxFilters={quotas?.limits?.maxFilters} nextPlanName={quotas?.nextPlanName} />
     </div>
   );
 }

@@ -105,7 +105,7 @@ export function useSubscriptionQuotas() {
   const nextPlan = NEXT_PLAN[plan];
   const nextPlanName = nextPlan ? PLAN_NAMES[nextPlan] : null;
 
-  const canExtract = isSubscribed && extractionsUsedThisMonth < limits.extractions;
+  const canExtract = isSubscribed && extractionsUsedThisMonth < limits?.extractions;
   const isMonthlyLimitReached = extractionsUsedThisMonth >= limits?.extractions;
   
   const canSaveFilter = savedFiltersCount < limits?.filters;

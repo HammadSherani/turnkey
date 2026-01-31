@@ -1,23 +1,33 @@
-import Stripe from "stripe";
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import clientPromise from "@/lib/mongodb";
+import { ObjectId } from "mongodb";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+export async function GET(req) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) return NextResponse.redirect(new URL("/auth", req.url));
 
-export async function POST(req) {
-  const body = await req.json();
-  const { email } = body;
+    const client = await clientPromise;
+    const db = client.db();
 
-  const checkout = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    customer_email: email,
-    line_items: [
-      {
-        price: process.env.STRIPE_PRICE_STARTER,
-        quantity: 1,
-      },
-    ],
-    success_url: `${process.env.NEXT_PUBLIC_URL}/dashboard?success=true`,
-    cancel_url: `${process.env.NEXT_PUBLIC_URL}/auth`,
-  });
+    // User ka current plan aur status reset karein
+    // Note: Asli production mein ye kaam Webhook se hona chahiye (Step 3)
+    // Lekin simple setup ke liye hum yahan update kar rahe hain
+    await db.collection("users").updateOne(
+      { _id: new ObjectId(session.user.id) },
+      { 
+        $set: { 
+          paymentStatus: "active",
+          extractionsUsed: 0 // Naye plan par usage reset
+        } 
+      }
+    );
 
-  return Response.json({ url: checkout.url });
+    // Dashboard par wapis bhej dein
+    return NextResponse.redirect(new URL("/dashboard?payment=success", req.url));
+  } catch (error) {
+    return NextResponse.redirect(new URL("/dashboard?payment=error", req.url));
+  }
 }

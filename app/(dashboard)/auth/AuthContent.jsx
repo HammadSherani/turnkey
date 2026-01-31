@@ -116,12 +116,12 @@ export default function AuthPage() {
       // 2. Redirect to Stripe Buy URL
       const currentPlanData = plans.find(p => p.id === selectedPlan);
       
-      // if (currentPlanData?.stripeUrl) {
-      //   console.log("🔄 Redirecting to Stripe:", currentPlanData.stripeUrl);
-      //   window.location.href = currentPlanData.stripeUrl;
-      // } else {
-      //   throw new Error("URL de paiement introuvable");
-      // }
+      if (currentPlanData?.stripeUrl) {
+        console.log("🔄 Redirecting to Stripe:", currentPlanData.stripeUrl);
+        window.location.href = currentPlanData.stripeUrl;
+      } else {
+        throw new Error("URL de paiement introuvable");
+      }
 
     } catch (err) {
       console.error("❌ Registration/Checkout Error:", err);

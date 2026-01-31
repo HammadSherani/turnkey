@@ -331,7 +331,7 @@ export default function FiltersSidebar({
           size="lg"
           className="w-full shadow-lg bg-primary text-white hover:bg-primary/90"
           onClick={handleExtractClick}
-          disabled={isExtracting || isQuotaReached || !isFormValid()}
+          // disabled={isExtracting || isQuotaReached || !isFormValid()}
         >
           {isExtracting ? (
             <span className="flex items-center gap-2">
