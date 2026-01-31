@@ -79,6 +79,10 @@ export default function Dashboard() {
     }
 
     setIsExtracting(true);
+
+    // console.log("payload", payload);
+    // return;
+    
     try {
       const response = await fetch("/api/outlook/extract", {
         method: "POST",

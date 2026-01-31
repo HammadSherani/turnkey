@@ -12,7 +12,7 @@ export async function POST(req) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { subject, sender, startDate, endDate, extractionRules } = await req.json();
+    const { subject, sender, startDate, endDate, extractionRules, filterName } = await req.json();
 
     const client = await clientPromise;
     const db = client.db();
@@ -103,7 +103,8 @@ export async function POST(req) {
 
       extractionRules?.forEach(rule => {
         const value = extract(rule, bodyContent);
-        extractedFields[rule.keyword] = value ?? "Not Found";
+        const columnKey = rule.fieldName || rule.keyword;
+        extractedFields[columnKey] = value ?? "Not Found";
       });
 
 

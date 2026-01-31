@@ -22,7 +22,7 @@ import { format } from "date-fns";
 import { 
   CalendarIcon, Search, Database, Plus, X, Lock, 
   ArrowUpCircle, Play, Save, Filter, Trash2, ChevronDown, 
-  Loader2
+  Loader2, Tag
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ExtractionPreview from "./ExtractionPreview";
@@ -48,7 +48,7 @@ export default function FiltersSidebar({
   savedFilters = [],
   onDeleteFilter,
   onLoadFilter,
-  onUpgrade // Dashboard se pass kiya gaya function
+  onUpgrade 
 }) {
   const [subject, setSubject] = useState("");
   const [sender, setSender] = useState("");
@@ -56,10 +56,10 @@ export default function FiltersSidebar({
   const [endDate, setEndDate] = useState(undefined);
   
   const [extractionRules, setExtractionRules] = useState([
-    { id: "1", extractType: "after", searchText: "", endType: "word" },
+    { id: "1", extractType: "after", filterName: "" ,searchText: "", endType: "word" },
   ]);
 
-  // Validation Schema
+  // Validation Schema Updated
   const schema = yup.object().shape({
     subject: yup.string().optional(),
     sender: yup.string().optional(),
@@ -69,6 +69,7 @@ export default function FiltersSidebar({
       .array()
       .of(
         yup.object().shape({
+          filterName: yup.string().trim().required("Nom du champ est requis"),
           extractType: yup.string().required(),
           searchText: yup.string().trim().required("Le mot-clé est requis"),
           endType: yup.string().required(),
@@ -87,9 +88,6 @@ export default function FiltersSidebar({
     }
   };
 
-  console.log("isQuotaReached", isQuotaReached);
-  
-
   const canAddMore = extractionRules.length < maxFieldsPerFilter;
 
   const addExtractionRule = () => {
@@ -100,6 +98,7 @@ export default function FiltersSidebar({
     setExtractionRules([...extractionRules, {
       id: Date.now().toString(),
       extractType: "after",
+      filterName: "", 
       searchText: "",
       endType: "word",
     }]);
@@ -118,7 +117,7 @@ export default function FiltersSidebar({
 
   const handleSaveFilterClick = () => {
     if (!isFormValid()) {
-      toast.error("Veuillez remplir les champs d'extraction.");
+      toast.error("Veuillez remplir tous les noms et mots-clés.");
       return;
     }
     const filterData = {
@@ -137,13 +136,14 @@ export default function FiltersSidebar({
       return;
     }
     
-    // Payload format according to backend expectations
     const payload = {
       subject,
       sender,
       startDate: startDate ? startDate.toISOString() : null,
       endDate: endDate ? endDate.toISOString() : null,
+      // Fixed: filterName extracted from each rule inside the map
       extractionRules: extractionRules.map(rule => ({
+        fieldName: rule.filterName, 
         type: rule.extractType,
         keyword: rule.searchText,
         boundary: rule.endType
@@ -183,7 +183,7 @@ export default function FiltersSidebar({
                   <div className="flex-1 cursor-pointer" onClick={() => loadFilter(filter)}>
                     <div className="font-medium text-sm">{filter.name}</div>
                     <div className="text-[10px] text-muted-foreground uppercase">
-                      {filter.data.extractionRules.length} champs configurés
+                      {filter.data.extractionRules.length} champs
                     </div>
                   </div>
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => onDeleteFilter(filter.id)}>
@@ -202,25 +202,22 @@ export default function FiltersSidebar({
           <Search className="h-5 w-5" />
           <h2 className="font-bold text-foreground">Recherche d'E-mails</h2>
         </div>
-        <p className="text-[11px] text-muted-foreground mt-1">
-          Définissez vos critères pour trouver les e-mails à traiter.
-        </p>
       </div>
 
-      {/* Form Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-5 custom-scrollbar">
+        {/* Basic Filters */}
         <div className="space-y-2">
-          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sujet contient</Label>
-          <Input placeholder="ex: Facture, Commande..." value={subject} onChange={(e) => setSubject(e.target.value)} className="h-10" />
+          <Label className="text-xs font-semibold uppercase text-muted-foreground">Sujet contient</Label>
+          <Input placeholder="ex: Facture" value={subject} onChange={(e) => setSubject(e.target.value)} className="h-10" />
         </div>
 
         <div className="space-y-2">
-          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Expéditeur</Label>
+          <Label className="text-xs font-semibold uppercase text-muted-foreground">Expéditeur</Label>
           <Input placeholder="ex: billing@amazon.fr" value={sender} onChange={(e) => setSender(e.target.value)} className="h-10" />
         </div>
 
         <div className="space-y-2">
-          <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+          <Label className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-2">
             <CalendarIcon className="h-3 w-3" /> Période
           </Label>
           <div className="grid grid-cols-2 gap-2">
@@ -269,6 +266,17 @@ export default function FiltersSidebar({
                 </div>
                 
                 <div className="grid gap-2">
+                  {/* Fixed: Assigned to filterName */}
+                  <div className="relative">
+                    <Tag className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      placeholder="Nom du champ (ex: Total)" 
+                      value={rule.filterName} 
+                      onChange={(e) => updateExtractionRule(rule.id, "filterName", e.target.value)} 
+                      className="h-9 pl-9 bg-background font-medium" 
+                    />
+                  </div>
+
                   <Select value={rule.extractType} onValueChange={(val) => updateExtractionRule(rule.id, "extractType", val)}>
                     <SelectTrigger className="h-9 bg-background"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -277,71 +285,41 @@ export default function FiltersSidebar({
                     </SelectContent>
                   </Select>
 
-                  <Input placeholder="Mot-clé (ex: Total:)" value={rule.searchText} onChange={(e) => updateExtractionRule(rule.id, "searchText", e.target.value)} className="h-9 bg-background" />
+                  <Input 
+                    placeholder="Mot-clé (ex: Total:)" 
+                    value={rule.searchText} 
+                    onChange={(e) => updateExtractionRule(rule.id, "searchText", e.target.value)} 
+                    className="h-9 bg-background" 
+                  />
 
                   <Select value={rule.endType} onValueChange={(val) => updateExtractionRule(rule.id, "endType", val)}>
                     <SelectTrigger className="h-9 bg-background"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="word">Jusqu'à la fin du mot</SelectItem>
-                      <SelectItem value="line">Jusqu'à la fin de la ligne</SelectItem>
+                      <SelectItem value="word">Jusqu'au mot</SelectItem>
+                      <SelectItem value="line">Jusqu'à la ligne</SelectItem>
                       <SelectItem value="paragraph">Jusqu'au paragraphe</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-
                 <ExtractionPreview extractType={rule.extractType} endType={rule.endType} searchText={rule.searchText} />
               </div>
             ))}
 
-            <div className="pt-2">
-              {canAddMore ? (
-                <Button variant="outline" size="sm" className="w-full border-dashed border-primary/50 text-primary hover:bg-primary/5" onClick={addExtractionRule}>
-                  <Plus className="h-4 w-4 mr-2" /> Ajouter un champ
-                </Button>
-              ) : (
-                <div className="bg-muted/50 p-3 rounded-lg border border-border space-y-3 text-center">
-                  <div className="text-[11px] text-muted-foreground flex items-center justify-center gap-2">
-                    <Lock className="h-3 w-3" /> Limite atteinte pour le plan {plan}
-                  </div>
-                  {nextPlanName && (
-                    <Button variant="default" size="sm" className="w-full bg-primary" onClick={onUpgrade}>
-                      <ArrowUpCircle className="h-4 w-4 mr-2" /> Passer au plan {nextPlanName}
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
+            <Button variant="outline" size="sm" className="w-full border-dashed border-primary/50 text-primary" onClick={addExtractionRule} disabled={!canAddMore}>
+              <Plus className="h-4 w-4 mr-2" /> Ajouter un champ
+            </Button>
           </div>
         </div>
       </div>
 
-      {/* Footer Actions */}
       <div className="p-4 border-t border-border bg-background space-y-3">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full text-muted-foreground hover:text-primary"
-          onClick={handleSaveFilterClick}
-          disabled={!canSaveFilter || !isFormValid()}
-        >
+        <Button variant="ghost" size="sm" className="w-full" onClick={handleSaveFilterClick} disabled={!canSaveFilter || !isFormValid()}>
           <Save className="h-4 w-4 mr-2" /> Enregistrer ce filtre
         </Button>
 
-        <Button
-          size="lg"
-          className="w-full shadow-lg bg-primary text-white hover:bg-primary/90"
-          onClick={handleExtractClick}
-          // disabled={isExtracting || isQuotaReached || !isFormValid()}
-        >
-          {isExtracting ? (
-            <span className="flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" /> Extraction...
-            </span>
-          ) : (
-            <>
-              <Play className="h-5 w-5 mr-2" /> Lancer l'extraction
-            </>
-          )}
+        <Button size="lg" className="w-full shadow-lg" onClick={handleExtractClick} disabled={isExtracting}>
+          {isExtracting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Play className="h-5 w-5 mr-2" />}
+          {isExtracting ? "Extraction..." : "Lancer l'extraction"}
         </Button>
       </div>
     </div>
