@@ -3,7 +3,6 @@ export const plans = [
     id: "starter", 
     name: "Starter", 
     price: "14.99", 
-    // Frontend ke liye NEXT_PUBLIC_ hona zaroori hai
     priceId: process.env.NEXT_PUBLIC_STARTER_PRICE_ID, 
     stripeUrl: "https://buy.stripe.com/test_4gMeV5crj7NX6ho2us6Zy00",
     features: ["1500 extractions / mois", "3 filtres sauvegardés", "3 champs de données par filtre"],

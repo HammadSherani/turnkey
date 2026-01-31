@@ -255,7 +255,7 @@ export default function Dashboard() {
         <SubscriptionStatus
           planName={quotas.planName}
           extractionsUsed={quotas.extractionsUsedThisMonth}
-          extractionsLimit={quotas?.limits?.extractionsPerMonth}
+          extractionsLimit={quotas?.limits?.extractions}
           monthlyUsagePercent={usagePercent}
           onUpgrade={handleManageSubscription}
           onRefresh={quotas.refreshSubscription}
@@ -263,7 +263,7 @@ export default function Dashboard() {
 
         <ExtractionLimitAlert
           isMonthlyLimitReached={quotas.isMonthlyLimitReached}
-          monthlyLimit={quotas?.limits?.extractionsPerMonth}
+          monthlyLimit={quotas?.limits?.extractions}
           nextPlanName={quotas.nextPlanName}
           onUpgrade={handleManageSubscription}
         />

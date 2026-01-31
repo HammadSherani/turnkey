@@ -29,7 +29,7 @@ export default function SubscriptionStatus({
               {planName} Plan
             </span>
           </div>
-          <Button
+          {/* <Button
             variant="ghost"
             size="icon"
             className="h-8 w-8"
@@ -37,7 +37,7 @@ export default function SubscriptionStatus({
             title="Refresh"
           >
             <RefreshCw className="h-4 w-4" />
-          </Button>
+          </Button> */}
         </div>
 
         {/* Progress Bar */}
@@ -54,9 +54,9 @@ export default function SubscriptionStatus({
               style={{ width: `${Math.min(monthlyUsagePercent, 100)}%` }}
             />
           </div>
-          <p className="text-xs text-muted-foreground">
+          {/* <p className="text-xs text-muted-foreground">
             Quotas reset automatically each month.
-          </p>
+          </p> */}
         </div>
 
         {/* Upgrade Button */}
