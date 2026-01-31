@@ -17,12 +17,12 @@ export async function POST(req) {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 2. New User Object
     const newUser = {
       name,
       email,
       password: hashedPassword,
       role: "user",
+      status: "active",
       plan: planName || "STARTER", 
       paymentStatus: "pending",  
       extractionsUsed: 0,        

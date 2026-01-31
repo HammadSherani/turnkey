@@ -72,15 +72,17 @@ export default function AuthPage() {
   };
 
   const handleLogin = async (e) => {
+    try {
     e.preventDefault();
     setIsLoading(true);
     const res = await signIn("credentials", { email, password, redirect: false });
     setIsLoading(false);
-
-    if (res?.error) {
-      toast({ title: "Erreur", description: "Email ou mot de passe incorrect", variant: "destructive" });
-    } else {
-      router.push("/dashboard");
+    console.log("res", res);
+    
+    // router.push("/dashboard");  
+    } catch (error) {
+      toast({ title: "Erreur", description: error.message, variant: "destructive" });
+      
     }
   };
 
@@ -180,9 +182,9 @@ export default function AuthPage() {
   };
 
 
-  if (session) {
-    router.push("/dashboard");
-  }
+  // if (session) {
+  //   router.push("/dashboard");
+  // }
 
   if (currentView === "planSelection") {
     return (
