@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Check, Users, ArrowLeft, Loader2, Eye, EyeOff, X, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { plans } from "@/constants/data";
 
 const passwordRules = [
   { id: "length", label: "Au moins 8 caractères", test: (p) => p.length >= 8 },
@@ -27,11 +28,8 @@ const validateEmail = (email) => {
   return { isValid: true };
 };
 
-const plans = [
-  { id: "starter", name: "Starter", price: "20", features: ["500 extractions / mois", "2 filtres sauvegardés", "2 champs de données par filtre"] },
-  { id: "pro", name: "Pro", price: "40", popular: true, features: ["2 500 extractions / mois", "5 filtres sauvegardés", "5 champs de données par filtre"] },
-  { id: "prime", name: "Prime", price: "70", features: ["10 000 extractions / mois", "10 filtres sauvegardés", "10 champs de données par filtre"] },
-];
+// Updated plans with your Stripe Buy URLs and actual details
+
 
 export default function AuthPage() {
   const { data: session, status } = useSession();
@@ -97,59 +95,32 @@ export default function AuthPage() {
 
     setIsLoading(true);
     try {
-      // 1. Register User in MongoDB (Status will be pending)
       const regRes = await fetch("/api/register", {
         method: "POST",
-        body: JSON.stringify({ email, password, plan: selectedPlan }),
+        body: JSON.stringify({ 
+          email, 
+          password, 
+          planName: selectedPlan.toUpperCase() 
+        }),
         headers: { "Content-Type": "application/json" }
       });
-
-      if (!regRes.ok) {
-        const errData = await regRes.json();
-        throw new Error(errData.message || "Registration failed");
-      }
 
       const regData = await regRes.json();
+
+      if (!regRes.ok) {
+        throw new Error(regData.message || "Registration failed");
+      }
+
       console.log("✅ User registered:", regData);
 
-      // 2. Create Stripe Session
-      const stripeRes = await fetch("/api/checkout", {
-        method: "POST",
-        body: JSON.stringify({ email, planId: selectedPlan }),
-        headers: { "Content-Type": "application/json" }
-      });
-
-      const stripeData = await stripeRes.json();
-      console.log("📦 Stripe response:", stripeData);
-
-      // Check if response has error
-      if (!stripeRes.ok || stripeData.error) {
-        throw new Error(stripeData.message || stripeData.error || "Stripe session creation failed");
-      }
+      // 2. Redirect to Stripe Buy URL
+      const currentPlanData = plans.find(p => p.id === selectedPlan);
       
-      // Check if URL exists
-      if (stripeData.url) {
-        console.log("🔄 Redirecting to:", stripeData.url);
-        
-        // Check if it's a mock/dummy session (development mode)
-        if (stripeData.mock || stripeData.url.includes("mock=true")) {
-          setStripeError({
-            type: "warning",
-            title: "Mode Développement",
-            message: "Vous utilisez des prix fictifs. Configurez Stripe pour les paiements réels.",
-            details: stripeData.devNote
-          });
-          
-          // Redirect after showing warning
-          setTimeout(() => {
-            window.location.href = stripeData.url;
-          }, 2000);
-        } else {
-          // Real Stripe session - redirect immediately
-          window.location.href = stripeData.url;
-        }
+      if (currentPlanData?.stripeUrl) {
+        console.log("🔄 Redirecting to Stripe:", currentPlanData.stripeUrl);
+        window.location.href = currentPlanData.stripeUrl;
       } else {
-        throw new Error("URL de session manquante dans la réponse");
+        throw new Error("URL de paiement introuvable");
       }
 
     } catch (err) {
@@ -167,8 +138,7 @@ export default function AuthPage() {
         description: err.message, 
         variant: "destructive" 
       });
-    } finally {
-      setIsLoading(false);
+      setIsLoading(false); // Stop loading only if error occurs
     }
   };
 
@@ -209,7 +179,7 @@ export default function AuthPage() {
   if(session) {
     router.push("/dashboard");
   }
-
+  
   if (currentView === "planSelection") {
     return (
       <div className="min-h-screen bg-background py-12 px-4">
@@ -354,18 +324,12 @@ export default function AuthPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Stripe Error/Warning Alert */}
             {stripeError && (
               <Alert variant={stripeError.type === "warning" ? "default" : "destructive"}>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
                   <div className="font-semibold">{stripeError.title}</div>
                   <div className="text-sm mt-1">{stripeError.message}</div>
-                  {stripeError.details && (
-                    <div className="text-xs mt-2 opacity-80">
-                      {JSON.stringify(stripeError.details, null, 2)}
-                    </div>
-                  )}
                 </AlertDescription>
               </Alert>
             )}
@@ -431,6 +395,5 @@ export default function AuthPage() {
     );
   }
 
-  // Fallback
   return null;
 }

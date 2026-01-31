@@ -45,7 +45,7 @@ export default function SubscriptionStatus({
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Extractions this month</span>
             <span className="font-medium">
-              {extractionsUsed.toLocaleString()} / {extractionsLimit.toLocaleString()}
+              {extractionsUsed?.toLocaleString()} / {extractionsLimit?.toLocaleString()}
             </span>
           </div>
           <div className="relative h-2 bg-muted rounded-full overflow-hidden">
