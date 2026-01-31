@@ -98,6 +98,7 @@ export default function AuthPage() {
       const regRes = await fetch("/api/register", {
         method: "POST",
         body: JSON.stringify({
+          name: email.split('@')[0],
           email,
           password,
           planName: selectedPlan.toUpperCase()
@@ -106,7 +107,10 @@ export default function AuthPage() {
       });
 
       const regData = await regRes.json();
-      if (!regRes.ok) throw new Error(regData.message || "Registration failed");
+
+      if (!regRes.ok) {
+        throw new Error(regData.message || "Registration failed");
+      }
 
       const currentPlanData = plans.find(p => p.id === selectedPlan);
 
@@ -114,24 +118,30 @@ export default function AuthPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          priceId: currentPlanData.priceId, // .env se aayi hui ID
-          userId: regData.userId // Register API se mili hui New User ID
+          priceId: currentPlanData.priceId,
+          userId: regData.userId
         }),
       });
 
       const stripeData = await stripeRes.json();
 
       if (stripeData.url) {
-        // Direct Stripe ke secure checkout page par bhejein
         window.location.href = stripeData.url;
       } else {
-        throw new Error("Impossible d'initialiser le paiement");
+        throw new Error(stripeData.error || "Impossible d'initialiser le paiement");
       }
 
     } catch (err) {
-      console.error("❌ Error:", err);
-      setStripeError({ title: "Erreur", message: err.message });
-      toast({ title: "Erreur", description: err.message, variant: "destructive" });
+      console.error("❌ Registration/Checkout Error:", err);
+      setStripeError({
+        title: "Erreur",
+        message: err.message,
+      });
+      toast({
+        title: "Erreur",
+        description: err.message,
+        variant: "destructive"
+      });
       setIsLoading(false);
     }
   };
@@ -194,8 +204,8 @@ export default function AuthPage() {
                 // Plan select hone par pura plan object ya uski ID handle karein
                 onClick={() => handlePlanSelection(plan.id)}
                 className={`relative rounded-2xl bg-card p-8 transition-all duration-300 cursor-pointer hover:-translate-y-1 ${plan.popular
-                    ? "border-2 border-accent shadow-lg ring-1 ring-accent/20"
-                    : "border border-border hover:border-accent/40 hover:shadow-md"
+                  ? "border-2 border-accent shadow-lg ring-1 ring-accent/20"
+                  : "border border-border hover:border-accent/40 hover:shadow-md"
                   } ${selectedPlan === plan.id ? "ring-2 ring-accent border-accent" : ""}`}
               >
                 {plan.popular && (
@@ -231,8 +241,8 @@ export default function AuthPage() {
 
                 <Button
                   className={`w-full ${plan.popular
-                      ? "bg-accent hover:bg-accent/90 text-accent-foreground"
-                      : "bg-primary hover:bg-primary/90 text-primary-foreground"
+                    ? "bg-accent hover:bg-accent/90 text-accent-foreground"
+                    : "bg-primary hover:bg-primary/90 text-primary-foreground"
                     }`}
                   size="lg"
                   // Click handler already on parent div, but keeping here for UX
