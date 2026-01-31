@@ -37,14 +37,12 @@ export default function Dashboard() {
   const [extractedData, setExtractedData] = useState([]);
   const [isConnectingOutlook, setIsConnectingOutlook] = useState(false);
 
-  // Hooks
   const quotas = useSubscriptionQuotas();
   const outlook = useOutlookConnection();
 
   console.log('quotas', quotas);
   
 
-  // 1. Basic Auth Guard (Only redirect to login if not authenticated)
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/auth?mode=login");

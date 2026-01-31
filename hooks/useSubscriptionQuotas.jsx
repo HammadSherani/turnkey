@@ -83,12 +83,12 @@ export function useSubscriptionQuotas() {
     }
   }, []);
 
-  useEffect(() => {
-    if (session) {
-      fetchSubscription();
-      fetchSavedFilters();
-    }
-  }, [session, fetchSubscription, fetchSavedFilters]);
+  // useEffect(() => {
+  //   if (session) {
+  //     fetchSubscription();
+  //     fetchSavedFilters();
+  //   }
+  // }, [session, fetchSubscription, fetchSavedFilters]);
 
   // Priority: 1. API Data, 2. Session Data, 3. Default (FREE)
   const plan = (subscriptionData?.plan || session?.user?.plan || "FREE").toUpperCase();
