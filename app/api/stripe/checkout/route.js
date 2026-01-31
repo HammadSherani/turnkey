@@ -1,33 +1,52 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import clientPromise from "@/lib/mongodb";
-import { ObjectId } from "mongodb";
+import Stripe from "stripe";
 
-export async function GET(req) {
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+export async function POST(req) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.redirect(new URL("/auth", req.url));
+    
+    const { priceId, userId } = await req.json();
 
-    const client = await clientPromise;
-    const db = client.db();
+    const finalUserId = session?.user?.id || userId;
 
-    // User ka current plan aur status reset karein
-    // Note: Asli production mein ye kaam Webhook se hona chahiye (Step 3)
-    // Lekin simple setup ke liye hum yahan update kar rahe hain
-    await db.collection("users").updateOne(
-      { _id: new ObjectId(session.user.id) },
-      { 
-        $set: { 
-          paymentStatus: "active",
-          extractionsUsed: 0 // Naye plan par usage reset
-        } 
-      }
-    );
+    if (!finalUserId) {
+      return NextResponse.json({ error: "User ID missing" }, { status: 400 });
+    }
 
-    // Dashboard par wapis bhej dein
-    return NextResponse.redirect(new URL("/dashboard?payment=success", req.url));
+    if (!priceId) {
+      return NextResponse.json({ error: "Price ID missing" }, { status: 400 });
+    }
+
+    const checkoutSession = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price: priceId, 
+          quantity: 1,
+        },
+      ],
+      client_reference_id: finalUserId, 
+      
+      success_url: `${process.env.NEXTAUTH_URL}/api/stripe/checkout-success`,
+      cancel_url: `${process.env.NEXTAUTH_URL}/dashboard`,
+      
+      // Tax ya Address wagera agar chahiye ho toh (optional)
+      automatic_tax: { enabled: false },
+    });
+
+    // Stripe ka URL bhej dein taake frontend redirect kar sake
+    return NextResponse.json({ url: checkoutSession.url });
+
   } catch (error) {
-    return NextResponse.redirect(new URL("/dashboard?payment=error", req.url));
+    console.error("Stripe Checkout Error:", error.message);
+    return NextResponse.json(
+      { error: "Initialisation du paiement échouée" }, 
+      { status: 500 }
+    );
   }
 }

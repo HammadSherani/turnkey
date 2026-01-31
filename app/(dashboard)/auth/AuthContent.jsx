@@ -38,7 +38,7 @@ export default function AuthPage() {
   const { toast } = useToast();
 
   // State management
-  const [currentView, setCurrentView] = useState("planSelection"); 
+  const [currentView, setCurrentView] = useState("planSelection");
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -51,14 +51,14 @@ export default function AuthPage() {
   useEffect(() => {
     const mode = searchParams?.get("mode");
     const plan = searchParams?.get("plan");
-    
+
     if (mode === "login") {
       setCurrentView("login");
     } else if (plan && ["starter", "pro", "prime"].includes(plan)) {
       setSelectedPlan(plan);
       setCurrentView("register");
     }
-    
+
     const error = searchParams?.get("error");
     if (error === "OAuthSignin") {
       setCurrentView("login");
@@ -87,58 +87,52 @@ export default function AuthPage() {
   const handleRegister = async (e) => {
     e.preventDefault();
     setStripeError(null);
-    
+
     if (!isPasswordStrong(password) || password !== confirmPassword) {
-        toast({ title: "Validation", description: "Veuillez vérifier vos informations", variant: "destructive" });
-        return;
+      toast({ title: "Validation", description: "Veuillez vérifier vos informations", variant: "destructive" });
+      return;
     }
 
     setIsLoading(true);
     try {
       const regRes = await fetch("/api/register", {
         method: "POST",
-        body: JSON.stringify({ 
-          email, 
-          password, 
-          planName: selectedPlan.toUpperCase() 
+        body: JSON.stringify({
+          email,
+          password,
+          planName: selectedPlan.toUpperCase()
         }),
         headers: { "Content-Type": "application/json" }
       });
 
       const regData = await regRes.json();
+      if (!regRes.ok) throw new Error(regData.message || "Registration failed");
 
-      if (!regRes.ok) {
-        throw new Error(regData.message || "Registration failed");
-      }
-
-      console.log("✅ User registered:", regData);
-
-      // 2. Redirect to Stripe Buy URL
       const currentPlanData = plans.find(p => p.id === selectedPlan);
-      
-      if (currentPlanData?.stripeUrl) {
-        console.log("🔄 Redirecting to Stripe:", currentPlanData.stripeUrl);
-        window.location.href = currentPlanData.stripeUrl;
+
+      const stripeRes = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          priceId: currentPlanData.priceId, // .env se aayi hui ID
+          userId: regData.userId // Register API se mili hui New User ID
+        }),
+      });
+
+      const stripeData = await stripeRes.json();
+
+      if (stripeData.url) {
+        // Direct Stripe ke secure checkout page par bhejein
+        window.location.href = stripeData.url;
       } else {
-        throw new Error("URL de paiement introuvable");
+        throw new Error("Impossible d'initialiser le paiement");
       }
 
     } catch (err) {
-      console.error("❌ Registration/Checkout Error:", err);
-      
-      setStripeError({
-        type: "error",
-        title: "Erreur",
-        message: err.message,
-        details: null
-      });
-      
-      toast({ 
-        title: "Erreur", 
-        description: err.message, 
-        variant: "destructive" 
-      });
-      setIsLoading(false); // Stop loading only if error occurs
+      console.error("❌ Error:", err);
+      setStripeError({ title: "Erreur", message: err.message });
+      toast({ title: "Erreur", description: err.message, variant: "destructive" });
+      setIsLoading(false);
     }
   };
 
@@ -176,10 +170,10 @@ export default function AuthPage() {
   };
 
 
-  if(session) {
+  if (session) {
     router.push("/dashboard");
   }
-  
+
   if (currentView === "planSelection") {
     return (
       <div className="min-h-screen bg-background py-12 px-4">
@@ -195,37 +189,67 @@ export default function AuthPage() {
 
           <div className="grid md:grid-cols-3 gap-6">
             {plans.map((plan) => (
-              <div key={plan.id} onClick={() => handlePlanSelection(plan.id)}
-                className={`relative rounded-2xl bg-card p-8 transition-all duration-300 cursor-pointer hover:-translate-y-1 ${
-                  plan.popular ? "border-2 border-accent shadow-lg ring-1 ring-accent/20" : "border border-border hover:border-accent/40 hover:shadow-md"
-                }`}>
+              <div
+                key={plan.id}
+                // Plan select hone par pura plan object ya uski ID handle karein
+                onClick={() => handlePlanSelection(plan.id)}
+                className={`relative rounded-2xl bg-card p-8 transition-all duration-300 cursor-pointer hover:-translate-y-1 ${plan.popular
+                    ? "border-2 border-accent shadow-lg ring-1 ring-accent/20"
+                    : "border border-border hover:border-accent/40 hover:shadow-md"
+                  } ${selectedPlan === plan.id ? "ring-2 ring-accent border-accent" : ""}`}
+              >
                 {plan.popular && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="bg-accent text-accent-foreground text-xs font-semibold px-4 py-1.5 rounded-full uppercase tracking-wide">Populaire</span>
+                    <span className="bg-accent text-accent-foreground text-xs font-semibold px-4 py-1.5 rounded-full uppercase tracking-wide">
+                      Populaire
+                    </span>
                   </div>
                 )}
+
                 <div className="text-center mb-8">
                   <h3 className="text-xl font-bold text-foreground mb-6">{plan.name}</h3>
                   <div className="flex items-baseline justify-center gap-1">
+                    {/* Price display from plans array */}
                     <span className="text-5xl font-extrabold text-foreground">{plan.price}€</span>
                   </div>
                   <div className="flex items-center justify-center gap-1.5 mt-2 text-muted-foreground text-sm">
                     <Users className="h-4 w-4" /> <span>par utilisateur / mois</span>
                   </div>
                 </div>
+
                 <ul className="space-y-4 mb-8">
                   {plan.features.map((feature) => (
                     <li key={feature} className="flex items-start gap-3">
                       <div className="mt-0.5 w-5 h-5 rounded-full bg-accent/10 flex items-center justify-center flex-shrink-0">
                         <Check className="w-3 h-3 text-accent" />
                       </div>
+                      {/* Features like "7500 extractions" mapped here */}
                       <span className="text-foreground text-sm">{feature}</span>
                     </li>
                   ))}
                 </ul>
-                <Button className={`w-full ${plan.popular ? "bg-accent hover:bg-accent/90 text-accent-foreground" : "bg-primary hover:bg-primary/90 text-primary-foreground"}`} size="lg">
+
+                <Button
+                  className={`w-full ${plan.popular
+                      ? "bg-accent hover:bg-accent/90 text-accent-foreground"
+                      : "bg-primary hover:bg-primary/90 text-primary-foreground"
+                    }`}
+                  size="lg"
+                  // Click handler already on parent div, but keeping here for UX
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePlanSelection(plan.id);
+                  }}
+                >
                   Choisir {plan.name}
                 </Button>
+
+                {/* Hidden info for verification during dev (Optional) */}
+                {process.env.NODE_ENV === 'development' && (
+                  <div className="mt-2 text-[10px] text-center text-muted-foreground opacity-20">
+                    ID: {plan.priceId?.substring(0, 12)}...
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -246,7 +270,7 @@ export default function AuthPage() {
           <CardHeader>
             <div className="flex justify-between items-center mb-2">
               <button onClick={() => router.push("/")} className="text-sm text-muted-foreground hover:text-foreground flex items-center">
-                  <ArrowLeft className="h-3 w-3 mr-1" /> Retour
+                <ArrowLeft className="h-3 w-3 mr-1" /> Retour
               </button>
             </div>
             <CardTitle className="text-2xl text-center">Connexion</CardTitle>
@@ -267,16 +291,16 @@ export default function AuthPage() {
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
                 <Label>Email</Label>
-                <Input type="email" value={email} onChange={(e) => handleEmailChange(e.target.value)} placeholder="votre@email.com" required disabled={isLoading}/>
+                <Input type="email" value={email} onChange={(e) => handleEmailChange(e.target.value)} placeholder="votre@email.com" required disabled={isLoading} />
                 {emailError && <p className="text-xs text-red-500">{emailError}</p>}
               </div>
 
               <div className="space-y-2">
                 <Label>Mot de passe</Label>
                 <div className="relative">
-                  <Input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required disabled={isLoading}/>
+                  <Input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required disabled={isLoading} />
                   <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-2.5 text-muted-foreground">
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
@@ -304,14 +328,14 @@ export default function AuthPage() {
 
   if (currentView === "register" && selectedPlan) {
     const currentPlan = plans.find(p => p.id === selectedPlan);
-    
+
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
         <Card className="w-full max-w-md">
           <CardHeader>
             <div className="flex justify-between items-center mb-2">
               <button onClick={resetToPlanSelection} className="text-sm text-muted-foreground hover:text-foreground flex items-center">
-                  <ArrowLeft className="h-3 w-3 mr-1" /> Changer le plan
+                <ArrowLeft className="h-3 w-3 mr-1" /> Changer le plan
               </button>
             </div>
             <CardTitle className="text-2xl text-center">Créer un compte</CardTitle>
@@ -346,23 +370,23 @@ export default function AuthPage() {
             <form onSubmit={handleRegister} className="space-y-4">
               <div className="space-y-2">
                 <Label>Email</Label>
-                <Input type="email" value={email} onChange={(e) => handleEmailChange(e.target.value)} placeholder="votre@email.com" required disabled={isLoading}/>
+                <Input type="email" value={email} onChange={(e) => handleEmailChange(e.target.value)} placeholder="votre@email.com" required disabled={isLoading} />
                 {emailError && <p className="text-xs text-red-500">{emailError}</p>}
               </div>
 
               <div className="space-y-2">
                 <Label>Mot de passe</Label>
                 <div className="relative">
-                  <Input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required disabled={isLoading}/>
+                  <Input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required disabled={isLoading} />
                   <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-2.5 text-muted-foreground">
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
 
               <div className="space-y-2">
                 <Label>Confirmer le mot de passe</Label>
-                <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="••••••••" required disabled={isLoading}/>
+                <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="••••••••" required disabled={isLoading} />
                 {password && (
                   <div className="grid grid-cols-1 gap-1 mt-2">
                     {passwordRules.map(r => (
