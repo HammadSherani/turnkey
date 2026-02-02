@@ -28,7 +28,7 @@ export async function PATCH(req) {
 
   await db.collection("users").updateOne(
     { _id: new ObjectId(userId) },
-    { $set: { paymentStatus: isActive ? "active" : "deactive", updatedAt: new Date() } }
+    { $set: { status: isActive ? "active" : "deactive", updatedAt: new Date() } }
   );
 
   return NextResponse.json({ success: true });

@@ -1,5 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { signOut, useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { 
   Users, LayoutDashboard, Settings, CreditCard, 
@@ -7,7 +9,7 @@ import {
   User as UserIcon, Menu, X, Circle, UserCircle
 } from 'lucide-react';
 
-// --- 1. Plans Data (Lowercase to match DB query) ---
+// --- 1. Plans Data ---
 const plans = [
   { id: "starter", name: "Starter", color: "bg-blue-100 text-blue-700" },
   { id: "pro", name: "Pro", color: "bg-purple-100 text-purple-700" },
@@ -15,6 +17,9 @@ const plans = [
 ];
 
 export default function FullAdminDashboard() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,27 +27,34 @@ export default function FullAdminDashboard() {
   const [currentPage, setCurrentPage] = useState(1);
   const usersPerPage = 6;
 
-  // --- 2. Fetch Users from Backend ---
+  // --- 2. Route Protection & Fetch Users ---
   useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const res = await fetch("/api/admin/users");
-        if (!res.ok) throw new Error("Unauthorized");
-        const data = await res.json();
-        setUsers(data);
-      } catch (err) {
-        console.error("❌ Error fetching users:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchUsers();
-  }, []);
+    // Agar loading khatam ho jaye aur session na ho ya role admin na ho
+    if (status === "unauthenticated" || (status === "authenticated" && session?.user?.role !== "admin")) {
+      // Access Denied handle karne ke liye niche return statement hai
+      return; 
+    }
 
-  // --- 3. Toggle User Status (Active/Deactive) ---
+    if (status === "authenticated" && session?.user?.role === "admin") {
+      const fetchUsers = async () => {
+        try {
+          const res = await fetch("/api/admin/users");
+          if (!res.ok) throw new Error("Unauthorized");
+          const data = await res.json();
+          setUsers(data);
+        } catch (err) {
+          console.error("❌ Error fetching users:", err);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchUsers();
+    }
+  }, [session, status]);
+
+  // --- 3. Toggle User Status ---
   const toggleStatus = async (userId, currentStatus) => {
     const nextStatus = currentStatus !== "active"; 
-    
     try {
       const res = await fetch("/api/admin/users", {
         method: "PATCH",
@@ -52,7 +64,7 @@ export default function FullAdminDashboard() {
 
       if (res.ok) {
         setUsers(users.map(u => 
-          u._id === userId ? { ...u, paymentStatus: nextStatus ? "active" : "deactive" } : u
+          u._id === userId ? { ...u, status: nextStatus ? "active" : "deactive" } : u
         ));
       }
     } catch (err) {
@@ -60,7 +72,12 @@ export default function FullAdminDashboard() {
     }
   };
 
-  // --- 4. Search & Pagination Logic ---
+  // --- 4. Sign Out Handler ---
+  const handleLogout = async () => {
+    await signOut({ callbackUrl: "/auth?mode=login" });
+  };
+
+  // --- 5. Logic for Search & Pagination ---
   const filteredUsers = users.filter(user => 
     user.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
     user.email?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -69,11 +86,36 @@ export default function FullAdminDashboard() {
   const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
   const currentUsers = filteredUsers.slice((currentPage - 1) * usersPerPage, currentPage * usersPerPage);
 
-  if (loading) return (
-    <div className="flex h-screen items-center justify-center bg-white">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-    </div>
-  );
+  // --- 6. Loading State ---
+  if (status === "loading" || (loading && status === "authenticated" && session?.user?.role === "admin")) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-white">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
+
+  // --- 7. Access Denied UI ---
+  if (status === "unauthenticated" || session?.user?.role !== "admin") {
+    return (
+      <div className="flex h-screen flex-col items-center justify-center bg-slate-50 text-center p-6">
+        <div className="bg-red-100 p-4 rounded-full mb-4">
+          <X className="text-red-600 w-12 h-12" />
+        </div>
+        <h1 className="text-4xl font-bold text-slate-900 mb-2">Access Denied</h1>
+        <p className="text-slate-600 mb-6 max-w-md">
+          Désolé, vous n'avez pas les permissions nécessaires pour accéder à cet espace. 
+          Veuillez contacter l'administrateur ou vous connecter avec un compte autorisé.
+        </p>
+        <button 
+          onClick={() => router.push("/")}
+          className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+        >
+          Retour à l'accueil
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-[#F8FAFC] text-slate-900 font-sans overflow-hidden">
@@ -93,10 +135,13 @@ export default function FullAdminDashboard() {
         </nav>
 
         <div className="p-4 border-t border-slate-100">
-           <button className="flex items-center gap-3 text-slate-500 hover:text-red-600 hover:bg-red-50 w-full p-2 rounded-lg transition-colors">
+            <button 
+              onClick={handleLogout}
+              className="flex items-center gap-3 text-slate-500 hover:text-red-600 hover:bg-red-50 w-full p-2 rounded-lg transition-colors"
+            >
               <LogOut size={20} />
               {sidebarOpen && <span className="font-medium text-sm">Sign Out</span>}
-           </button>
+            </button>
         </div>
       </aside>
 
@@ -119,8 +164,12 @@ export default function FullAdminDashboard() {
               <DropdownMenu.Trigger asChild>
                 <button className="flex items-center gap-3 pl-4 border-l border-slate-200 outline-none group">
                   <div className="text-right hidden sm:block">
-                    <p className="text-sm font-bold text-slate-800 leading-none">Admin Mode</p>
-                    <p className="text-[10px] text-slate-400 font-medium mt-1">SUPER ADMIN</p>
+                    <p className="text-sm font-bold text-slate-800 leading-none truncate max-w-[120px]">
+                      {session?.user?.name || "Admin User"}
+                    </p>
+                    <p className="text-[10px] text-slate-400 font-medium mt-1 uppercase tracking-widest">
+                      {session?.user?.role || "SUPER ADMIN"}
+                    </p>
                   </div>
                   <div className="w-9 h-9 rounded-full bg-slate-100 border-2 border-white shadow-sm flex items-center justify-center text-indigo-600 group-data-[state=open]:ring-2 group-data-[state=open]:ring-indigo-100 transition-all">
                     <UserIcon size={20} />
@@ -129,9 +178,16 @@ export default function FullAdminDashboard() {
               </DropdownMenu.Trigger>
               <DropdownMenu.Portal>
                 <DropdownMenu.Content className="min-w-[200px] bg-white rounded-xl shadow-2xl border border-slate-100 p-1.5 z-50" align="end" sideOffset={10}>
-                  <DropdownMenu.Item className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600 outline-none rounded-md hover:bg-slate-50 cursor-pointer"><UserCircle size={16} /> Profile</DropdownMenu.Item>
+                  <DropdownMenu.Item className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600 outline-none rounded-md hover:bg-slate-50 cursor-pointer">
+                    <UserCircle size={16} /> Profile
+                  </DropdownMenu.Item>
                   <DropdownMenu.Separator className="h-px bg-slate-100 my-1" />
-                  <DropdownMenu.Item className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 outline-none rounded-md hover:bg-red-50 cursor-pointer font-medium"><LogOut size={16} /> Logout</DropdownMenu.Item>
+                  <DropdownMenu.Item 
+                    onClick={handleLogout}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 outline-none rounded-md hover:bg-red-50 cursor-pointer font-medium"
+                  >
+                    <LogOut size={16} /> Logout
+                  </DropdownMenu.Item>
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>
             </DropdownMenu.Root>
@@ -173,7 +229,7 @@ export default function FullAdminDashboard() {
                   <tbody className="divide-y divide-slate-100">
                     {currentUsers.map((user) => {
                       const plan = plans.find(p => p.id === user.plan?.toLowerCase()) || plans[0];
-                      const isUserActive = user.paymentStatus === "active";
+                      const isUserActive = user.status === "active";
 
                       return (
                         <tr key={user._id} className="hover:bg-slate-50/40 transition-colors">
@@ -182,9 +238,9 @@ export default function FullAdminDashboard() {
                               <div className="w-8 h-8 rounded-full bg-slate-100 text-indigo-600 flex items-center justify-center font-bold text-xs border border-slate-200">
                                 {user.name?.charAt(0) || "U"}
                               </div>
-                              <div>
-                                <p className="text-sm font-semibold text-slate-800">{user.name}</p>
-                                <p className="text-xs text-slate-400">{user.email}</p>
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-slate-800 truncate">{user.name}</p>
+                                <p className="text-xs text-slate-400 truncate">{user.email}</p>
                               </div>
                             </div>
                           </td>
@@ -203,7 +259,7 @@ export default function FullAdminDashboard() {
                           </td>
                           <td className="px-6 py-4 text-right">
                             <button 
-                              onClick={() => toggleStatus(user._id, user.paymentStatus)}
+                              onClick={() => toggleStatus(user._id, user.status)}
                               className={`text-xs font-bold px-3 py-1.5 rounded-md transition-all ${isUserActive ? 'text-red-500 hover:bg-red-50' : 'text-indigo-600 hover:bg-indigo-50'}`}
                             >
                               {isUserActive ? 'Disable Account' : 'Enable Account'}

@@ -72,17 +72,50 @@ export default function AuthPage() {
   };
 
   const handleLogin = async (e) => {
-    try {
     e.preventDefault();
     setIsLoading(true);
-    const res = await signIn("credentials", { email, password, redirect: false });
-    setIsLoading(false);
-    console.log("res", res);
-    
-    // router.push("/dashboard");  
+
+    try {
+      // 1. Sign In call karein
+      const res = await signIn("credentials", {
+        email,
+        password,
+        redirect: false
+      });
+
+      if (res?.error) {
+        // NextAuth res.error mein string bhejta hai
+        const errorMessage = res.error === "Your account is deactive. Please contact admin."
+          ? res.error
+          : "Identifiants invalides ou erreur de connexion";
+
+        toast({
+          title: "Erreur",
+          description: errorMessage, // res.error use karein, error.message nahi
+          variant: "destructive"
+        });
+
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. Fresh Session fetch karein (Kyunki purana 'session' variable update nahi hua hoga)
+      const sessionRes = await fetch("/api/auth/session");
+      const freshSession = await sessionRes.json();
+
+      console.log("Fresh Session Role:", freshSession?.user?.role);
+
+      // 3. Role ki buniyad par redirect karein
+      if (freshSession?.user?.role === "admin") {
+        router.push("/admin/dashboard"); // Admin path
+      } else {
+        router.push("/dashboard"); // User path
+      }
+
     } catch (error) {
       toast({ title: "Erreur", description: error.message, variant: "destructive" });
-      
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -182,9 +215,15 @@ export default function AuthPage() {
   };
 
 
-  if (session) {
-    router.push("/dashboard");
-  }
+  useEffect(() => {
+    if (status === "authenticated" && session?.user) {
+      if (session.user.role === "admin") {
+        router.push("/admin/dashboard");
+      } else {
+        router.push("/dashboard");
+      }
+    }
+  }, [session, status, router]);
 
   if (currentView === "planSelection") {
     return (
