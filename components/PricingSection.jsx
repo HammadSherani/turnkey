@@ -1,42 +1,9 @@
 import { Button } from "@/components/ui/button";
+import { plans } from "@/constants/data";
 import { Check, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-const plans = [
-  {
-    id: "starter",
-    name: "Starter",
-    price: "20",
-    features: [
-      "500 extractions / mois",
-      "2 filtres sauvegardés",
-      "2 champs de données par filtre",
-    ],
-    popular: false,
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    price: "40",
-    features: [
-      "2 500 extractions / mois",
-      "5 filtres sauvegardés",
-      "5 champs de données par filtre",
-    ],
-    popular: true,
-  },
-  {
-    id: "prime",
-    name: "Prime",
-    price: "70",
-    features: [
-      "10 000 extractions / mois",
-      "10 filtres sauvegardés",
-      "10 champs de données par filtre",
-    ],
-    popular: false,
-  },
-];
+
 
 const PricingSection = () => {
   const router = useRouter();
