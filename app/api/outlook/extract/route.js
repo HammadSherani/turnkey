@@ -137,31 +137,37 @@ export async function POST(req) {
 
 
 function extract(rule, text) {
-  const keyword = rule.keyword.toLowerCase();
+  // Keyword ko escape karna zaroori hai taaki special characters (unka, ?, :) regex break na karein
+  const escapedKeyword = rule.keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   if (rule.boundary === "paragraph") {
     const paragraphs = text.split(/\n\s*\n/);
     const match = paragraphs.find(p =>
       rule.type === "after"
-        ? p.toLowerCase().includes(keyword)
+        ? p.toLowerCase().includes(rule.keyword.toLowerCase())
         : false
     );
     return match || null;
   }
 
   if (rule.boundary === "line") {
-    const lines = text.split("\n");
-    const line = lines.find(l =>
-      rule.type === "after"
-        ? l.toLowerCase().includes(keyword)
-        : false
-    );
-    return line || null;
+    if (rule.type === "after") {
+      // Yeh regex keyword ke baad wali puri line uthayega, bhale hi wo next line pe ho
+      // [\s\S]*? ka matlab hai any character including newlines
+      // \n? optional newline handle karta hai
+      const regex = new RegExp(`${escapedKeyword}\\s*[:#-]?\\s*([^\n\r]+)`, "i");
+      const match = text.match(regex);
+      return match?.[1]?.trim() || null;
+    } else {
+      const regex = new RegExp(`([^\n\r]+)\\s*${escapedKeyword}`, "i");
+      const match = text.match(regex);
+      return match?.[1]?.trim() || null;
+    }
   }
 
   if (rule.boundary === "word") {
-    const escapedKeyword = keyword.replace(/\s+/g, "\\s+");
-
+    // \s+ automatically new lines (\n) ko bhi cover kar leta hai
+    // Iska matlab keyword ke baad chahe space ho ya enter, ye agla word utha lega
     const regex =
       rule.type === "after"
         ? new RegExp(`${escapedKeyword}\\s*[:#-]?\\s*(\\S+)`, "i")
@@ -170,7 +176,6 @@ function extract(rule, text) {
     const match = text.match(regex);
     return match?.[1] || null;
   }
-
 
   return null;
 }

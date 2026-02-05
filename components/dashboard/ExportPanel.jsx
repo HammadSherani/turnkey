@@ -43,7 +43,7 @@ export default function ExportPanel({
       <div className="p-4 border-b border-border bg-muted/10">
         <div className="flex items-center gap-2">
           <Download className="h-5 w-5 text-accent" />
-          <h2 className="font-semibold text-foreground">Excel Export</h2>
+          <h2 className="font-semibold text-foreground">Export Excel</h2>
         </div>
       </div>
 
@@ -56,8 +56,12 @@ export default function ExportPanel({
                 <FileSpreadsheet className="h-5 w-5" />
               </div>
               <div className="text-left">
-                <p className="text-[10px] text-muted-foreground uppercase font-black">Extraction Successful</p>
-                <p className="text-lg font-bold leading-none">{rowCount} Records Ready</p>
+                <p className="text-[10px] text-muted-foreground uppercase font-black">
+                  Extraction réussie
+                </p>
+                <p className="text-lg font-bold leading-none">
+                  {rowCount} enregistrements prêts
+                </p>
               </div>
             </div>
             <CheckCircle className="h-6 w-6 text-green-500" />
@@ -65,7 +69,9 @@ export default function ExportPanel({
         ) : (
           <div className="text-center py-6 border-2 border-dashed border-border rounded-xl">
             <Lock className="h-6 w-6 text-muted-foreground/20 mx-auto mb-2" />
-            <p className="text-xs text-muted-foreground">Waiting for extraction process...</p>
+            <p className="text-xs text-muted-foreground">
+              En attente du processus d’extraction…
+            </p>
           </div>
         )}
 
@@ -77,7 +83,7 @@ export default function ExportPanel({
           onClick={runDownload}
         >
           <Download className="h-5 w-5 mr-2" />
-          Download Excel File
+          Télécharger le fichier Excel
         </Button>
       </div>
 
@@ -86,9 +92,13 @@ export default function ExportPanel({
         <div className="px-4 py-2 bg-muted/30 flex items-center justify-between border-b border-border">
           <div className="flex items-center gap-2">
             <TableIcon className="h-3.5 w-3.5 text-accent" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Data Preview</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              Aperçu des données
+            </span>
           </div>
-          <span className="text-[9px] bg-accent/10 text-accent px-2 py-0.5 rounded-full font-bold">LIVE</span>
+          <span className="text-[9px] bg-accent/10 text-accent px-2 py-0.5 rounded-full font-bold">
+            EN DIRECT
+          </span>
         </div>
 
         {/* Horizontal & Vertical Scrollable Area */}
@@ -98,8 +108,11 @@ export default function ExportPanel({
               <thead className="sticky top-0 bg-background/95 backdrop-blur-sm z-20">
                 <tr>
                   {headers.map((header) => (
-                    <th key={header} className="px-4 py-3 text-[10px] font-black border-b border-border uppercase tracking-wider text-muted-foreground bg-muted/20 w-[150px]">
-                      {header.replace("field_", "Field ")}
+                    <th
+                      key={header}
+                      className="px-4 py-3 text-[10px] font-black border-b border-border uppercase tracking-wider text-muted-foreground bg-muted/20 w-[150px]"
+                    >
+                      {header.replace("field_", "Champ ")}
                     </th>
                   ))}
                 </tr>
@@ -117,7 +130,10 @@ export default function ExportPanel({
                     
                     {/* Dynamic Custom Fields Mapping */}
                     {Object.entries(row.extractedData).map(([key, val], cellIndex) => (
-                      <td key={cellIndex} className="px-4 py-3 text-[11px] text-accent font-semibold">
+                      <td
+                        key={cellIndex}
+                        className="px-4 py-3 text-[11px] text-accent font-semibold"
+                      >
                         <div className="max-h-[40px] overflow-y-auto overflow-x-hidden leading-tight custom-scrollbar">
                           {val}
                         </div>
@@ -129,8 +145,10 @@ export default function ExportPanel({
             </table>
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-muted-foreground/30 space-y-2">
-               <TableIcon className="h-10 w-10 stroke-[1px]" />
-               <p className="italic text-xs">No data available for preview</p>
+              <TableIcon className="h-10 w-10 stroke-[1px]" />
+              <p className="italic text-xs">
+                Aucune donnée disponible pour l’aperçu
+              </p>
             </div>
           )}
         </div>

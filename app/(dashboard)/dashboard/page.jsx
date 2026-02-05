@@ -242,7 +242,7 @@ export default function Dashboard() {
                 <DropdownMenuContent align="end" className="w-56">
                   <div className="px-2 py-1.5 text-xs text-muted-foreground border-b">{session?.user?.email}</div>
                   <DropdownMenuItem onClick={() => router.push("/account")}><User className="h-4 w-4 mr-2" /> Mon Compte</DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleManageSubscription}><TrendingUp className="h-4 w-4 mr-2" /> Abonnement</DropdownMenuItem>
+                  {/* <DropdownMenuItem onClick={handleManageSubscription}><TrendingUp className="h-4 w-4 mr-2" /> Abonnement</DropdownMenuItem> */}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem className="text-destructive" onClick={handleLogout}><LogOut className="h-4 w-4 mr-2" /> Déconnexion</DropdownMenuItem>
                   <DropdownMenuItem className="text-destructive" onClick={handleDisconnect}><LogOut className="h-4 w-4 mr-2" /> Déconnecter Outlook</DropdownMenuItem>

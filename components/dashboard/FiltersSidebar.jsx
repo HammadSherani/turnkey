@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import * as yup from "yup";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,7 @@ import { format } from "date-fns";
 import { 
   CalendarIcon, Search, Database, Plus, X, Lock, 
   ArrowUpCircle, Play, Save, Filter, Trash2, ChevronDown, 
-  Loader2, Tag
+  Loader2, Tag, RotateCcw
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ExtractionPreview from "./ExtractionPreview";
@@ -54,12 +54,18 @@ export default function FiltersSidebar({
   const [sender, setSender] = useState("");
   const [startDate, setStartDate] = useState(undefined);
   const [endDate, setEndDate] = useState(undefined);
+  // Track currently loaded filter ID for updates
+  const [activeFilterId, setActiveFilterId] = useState(null);
+  const [activeFilterName, setActiveFilterName] = useState("");
   
   const [extractionRules, setExtractionRules] = useState([
     { id: "1", extractType: "after", filterName: "" ,searchText: "", endType: "word" },
   ]);
 
-  // Validation Schema Updated
+  console.log("savedFilters", savedFilters);
+  
+
+  // Validation Schema
   const schema = yup.object().shape({
     subject: yup.string().optional(),
     sender: yup.string().optional(),
@@ -115,20 +121,36 @@ export default function FiltersSidebar({
     );
   };
 
-  const handleSaveFilterClick = () => {
-    if (!isFormValid()) {
-      toast.error("Veuillez remplir tous les noms et mots-clés.");
-      return;
-    }
-    const filterData = {
-      subject,
-      sender,
-      startDate: startDate ? startDate.toISOString() : null,
-      endDate: endDate ? endDate.toISOString() : null,
-      extractionRules,
-    };
-    onSaveFilter(filterData);
+  // Reset function to clear form and exit edit mode
+  const handleReset = () => {
+    setActiveFilterId(null);
+    setActiveFilterName("");
+    setSubject("");
+    setSender("");
+    setStartDate(undefined);
+    setEndDate(undefined);
+    setExtractionRules([{ id: "1", extractType: "after", filterName: "" ,searchText: "", endType: "word" }]);
+    toast.info("Formulaire réinitialisé");
   };
+
+  const handleSaveFilterClick = () => {
+  if (!isFormValid()) {
+    toast.error("Veuillez remplir tous les noms et mots-clés.");
+    return;
+  }
+  
+  const filterData = {
+    id: activeFilterId, 
+    // Agar activeFilterName khali hai (naya filter), toh subject ya "Nouveau Filtre" use karein
+    name: activeFilterName || subject || "Nouveau Filtre", 
+    subject,
+    sender,
+    startDate: startDate ? startDate.toISOString() : null,
+    endDate: endDate ? endDate.toISOString() : null,
+    extractionRules,
+  };
+  onSaveFilter(filterData);
+};
 
   const handleExtractClick = () => {
     if (!isFormValid()) {
@@ -141,7 +163,6 @@ export default function FiltersSidebar({
       sender,
       startDate: startDate ? startDate.toISOString() : null,
       endDate: endDate ? endDate.toISOString() : null,
-      // Fixed: filterName extracted from each rule inside the map
       extractionRules: extractionRules.map(rule => ({
         fieldName: rule.filterName, 
         type: rule.extractType,
@@ -153,12 +174,15 @@ export default function FiltersSidebar({
   };
 
   const loadFilter = (filter) => {
+    setActiveFilterId(filter.id);
+    setActiveFilterName(filter.name);
     setSubject(filter.data.subject || "");
     setSender(filter.data.sender || "");
     setStartDate(filter.data.startDate ? new Date(filter.data.startDate) : undefined);
     setEndDate(filter.data.endDate ? new Date(filter.data.endDate) : undefined);
     setExtractionRules(filter.data.extractionRules || []);
     onLoadFilter(filter);
+    toast.success(`Filtre "${filter.name}" chargé`);
   };
 
   return (
@@ -186,7 +210,7 @@ export default function FiltersSidebar({
                       {filter.data.extractionRules.length} champs
                     </div>
                   </div>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => onDeleteFilter(filter.id)}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => onDeleteFilter(filter._id)}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </DropdownMenuItem>
@@ -196,24 +220,31 @@ export default function FiltersSidebar({
         </div>
       )}
 
-      {/* Header */}
-      <div className="p-4 border-b border-border bg-muted/20">
+      {/* Header with Reset Option */}
+      <div className="p-4 border-b border-border bg-muted/20 flex items-center justify-between">
         <div className="flex items-center gap-2 text-primary">
           <Search className="h-5 w-5" />
-          <h2 className="font-bold text-foreground">Recherche d'E-mails</h2>
+          <h2 className="font-bold text-foreground">
+            {activeFilterId ? "Modifier le filtre" : "Recherche d'E-mails"}
+          </h2>
         </div>
+        {activeFilterId && (
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={handleReset} title="Nouveau filtre">
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-5 custom-scrollbar">
         {/* Basic Filters */}
         <div className="space-y-2">
-          <Label className="text-xs font-semibold uppercase text-muted-foreground">Sujet contient</Label>
+          <Label className="text-xs font-semibold uppercase text-muted-foreground">objet du mail</Label>
           <Input placeholder="ex: Facture" value={subject} onChange={(e) => setSubject(e.target.value)} className="h-10" />
         </div>
 
         <div className="space-y-2">
-          <Label className="text-xs font-semibold uppercase text-muted-foreground">Expéditeur</Label>
-          <Input placeholder="ex: billing@amazon.fr" value={sender} onChange={(e) => setSender(e.target.value)} className="h-10" />
+          <Label className="text-xs font-semibold uppercase text-muted-foreground">Expéditeur (optional)</Label>
+          <Input placeholder="ex: billing@amazon.fr (optional)" value={sender} onChange={(e) => setSender(e.target.value)} className="h-10" />
         </div>
 
         <div className="space-y-2">
@@ -266,7 +297,6 @@ export default function FiltersSidebar({
                 </div>
                 
                 <div className="grid gap-2">
-                  {/* Fixed: Assigned to filterName */}
                   <div className="relative">
                     <Tag className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input 
@@ -314,7 +344,8 @@ export default function FiltersSidebar({
 
       <div className="p-4 border-t border-border bg-background space-y-3">
         <Button variant="ghost" size="sm" className="w-full" onClick={handleSaveFilterClick} disabled={!canSaveFilter || !isFormValid()}>
-          <Save className="h-4 w-4 mr-2" /> Enregistrer ce filtre
+          <Save className="h-4 w-4 mr-2" /> 
+          {activeFilterId ? "Mettre à jour le filtre" : "Enregistrer ce filtre"}
         </Button>
 
         <Button size="lg" className="w-full shadow-lg" onClick={handleExtractClick} disabled={isExtracting}>

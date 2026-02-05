@@ -1,8 +1,6 @@
 import { AlertTriangle, Calendar, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-
-
 export default function ExtractionLimitAlert({
   isMonthlyLimitReached,
   monthlyLimit,
@@ -18,13 +16,13 @@ export default function ExtractionLimitAlert({
         <div className="flex-1 space-y-2">
           <div className="space-y-1">
             <p className="font-medium text-foreground">
-              Monthly extraction quota reached
+              Quota d’extraction mensuelle atteinte
             </p>
             <p className="text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
                 <Calendar className="h-4 w-4" />
-                You have reached your quota of {monthlyLimit?.toLocaleString()} extractions this month.
-                Quotas reset automatically each month.
+                Vous avez atteint votre quota de {monthlyLimit?.toLocaleString()} extractions ce mois-ci.
+                Les quotas sont réinitialisés automatiquement chaque mois.
               </span>
             </p>
           </div>
@@ -35,7 +33,7 @@ export default function ExtractionLimitAlert({
               onClick={onUpgrade}
             >
               <TrendingUp className="h-4 w-4 mr-2" />
-              Change Plan
+              Changer de forfait
             </Button>
           )}
         </div>
