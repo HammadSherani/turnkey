@@ -6,53 +6,51 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { 
   Users, LayoutDashboard, Settings, CreditCard, 
   LogOut, Bell, Search, ChevronLeft, ChevronRight, 
-  User as UserIcon, Menu, X, Circle, UserCircle
+  User as UserIcon, Menu, X, Circle, UserCircle, Mail, Clock
 } from 'lucide-react';
-
-// --- 1. Plans Data ---
-const plans = [
-  { id: "starter", name: "Starter", color: "bg-blue-100 text-blue-700" },
-  { id: "pro", name: "Pro", color: "bg-purple-100 text-purple-700" },
-  { id: "prime", name: "Prime", color: "bg-amber-100 text-amber-700" },
-];
+import { format } from "date-fns";
 
 export default function FullAdminDashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
   
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activeTab, setActiveTab] = useState("users");
   const [users, setUsers] = useState([]);
+  const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const usersPerPage = 6;
+  const itemsPerPage = 6;
 
-  // --- 2. Route Protection & Fetch Users ---
   useEffect(() => {
-    // Agar loading khatam ho jaye aur session na ho ya role admin na ho
     if (status === "unauthenticated" || (status === "authenticated" && session?.user?.role !== "admin")) {
-      // Access Denied handle karne ke liye niche return statement hai
       return; 
     }
 
     if (status === "authenticated" && session?.user?.role === "admin") {
-      const fetchUsers = async () => {
+      const fetchData = async () => {
+        setLoading(true);
         try {
-          const res = await fetch("/api/admin/users");
-          if (!res.ok) throw new Error("Unauthorized");
-          const data = await res.json();
-          setUsers(data);
+          const userRes = await fetch("/api/admin/users");
+          const userData = await userRes.json();
+          setUsers(userData);
+
+          const msgRes = await fetch("/api/contact");
+          if (msgRes.ok) {
+            const msgData = await msgRes.json();
+            setMessages(msgData);
+          }
         } catch (err) {
-          console.error("❌ Error fetching users:", err);
+          console.error("❌ Error fetching data:", err);
         } finally {
           setLoading(false);
         }
       };
-      fetchUsers();
+      fetchData();
     }
   }, [session, status]);
 
-  // --- 3. Toggle User Status ---
   const toggleStatus = async (userId, currentStatus) => {
     const nextStatus = currentStatus !== "active"; 
     try {
@@ -61,33 +59,24 @@ export default function FullAdminDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, isActive: nextStatus })
       });
-
       if (res.ok) {
-        setUsers(users.map(u => 
-          u._id === userId ? { ...u, status: nextStatus ? "active" : "deactive" } : u
-        ));
+        setUsers(users.map(u => u._id === userId ? { ...u, status: nextStatus ? "active" : "deactive" } : u));
       }
-    } catch (err) {
-      console.error("❌ Failed to update status");
-    }
+    } catch (err) { console.error("❌ Failed to update status"); }
   };
 
-  // --- 4. Sign Out Handler ---
   const handleLogout = async () => {
     await signOut({ callbackUrl: "/auth?mode=login" });
   };
 
-  // --- 5. Logic for Search & Pagination ---
-  const filteredUsers = users.filter(user => 
-    user.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    user.email?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredData = activeTab === "users" 
+    ? users.filter(u => u.name?.toLowerCase().includes(searchQuery.toLowerCase()) || u.email?.toLowerCase().includes(searchQuery.toLowerCase()))
+    : messages.filter(m => m.email?.toLowerCase().includes(searchQuery.toLowerCase()) || m.message?.toLowerCase().includes(searchQuery.toLowerCase()));
 
-  const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
-  const currentUsers = filteredUsers.slice((currentPage - 1) * usersPerPage, currentPage * usersPerPage);
+  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+  const currentItems = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  // --- 6. Loading State ---
-  if (status === "loading" || (loading && status === "authenticated" && session?.user?.role === "admin")) {
+  if (status === "loading" || (loading && status === "authenticated")) {
     return (
       <div className="flex h-screen items-center justify-center bg-white">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
@@ -95,24 +84,12 @@ export default function FullAdminDashboard() {
     );
   }
 
-  // --- 7. Access Denied UI ---
   if (status === "unauthenticated" || session?.user?.role !== "admin") {
     return (
       <div className="flex h-screen flex-col items-center justify-center bg-slate-50 text-center p-6">
-        <div className="bg-red-100 p-4 rounded-full mb-4">
-          <X className="text-red-600 w-12 h-12" />
-        </div>
+        <X className="text-red-600 w-12 h-12 mb-4" />
         <h1 className="text-4xl font-bold text-slate-900 mb-2">Access Denied</h1>
-        <p className="text-slate-600 mb-6 max-w-md">
-          Désolé, vous n'avez pas les permissions nécessaires pour accéder à cet espace. 
-          Veuillez contacter l'administrateur ou vous connecter avec un compte autorisé.
-        </p>
-        <button 
-          onClick={() => router.push("/")}
-          className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
-        >
-          Retour à l'accueil
-        </button>
+        <button onClick={() => router.push("/")} className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold">Retour à l'accueil</button>
       </div>
     );
   }
@@ -120,64 +97,54 @@ export default function FullAdminDashboard() {
   return (
     <div className="flex h-screen bg-[#F8FAFC] text-slate-900 font-sans overflow-hidden">
       
-      {/* --- SIDEBAR --- */}
       <aside className={`${sidebarOpen ? 'w-64' : 'w-20'} bg-white border-r border-slate-200 transition-all duration-300 flex flex-col z-20`}>
         <div className="p-6 flex items-center gap-3">
           <div className="bg-indigo-600 min-w-[32px] h-8 flex items-center justify-center rounded-lg text-white font-bold">R</div>
-          {sidebarOpen && <span className="font-bold text-xl tracking-tight text-indigo-600">RadixUI</span>}
+          {sidebarOpen && <span className="font-bold text-xl tracking-tight text-indigo-600">Admin Dashboard</span>}
         </div>
 
         <nav className="flex-1 px-4 space-y-2 mt-4">
-          <NavItem icon={<LayoutDashboard size={20} />} label="Overview" active={false} open={sidebarOpen} />
-          <NavItem icon={<Users size={20} />} label="Users" active={true} open={sidebarOpen} />
-          <NavItem icon={<CreditCard size={20} />} label="Billing" active={false} open={sidebarOpen} />
-          <NavItem icon={<Settings size={20} />} label="Settings" active={false} open={sidebarOpen} />
+          <button onClick={() => {setActiveTab("users"); setCurrentPage(1);}} className="w-full">
+            <NavItem icon={<Users size={20} />} label="Users" active={activeTab === "users"} open={sidebarOpen} />
+          </button>
+          <button onClick={() => {setActiveTab("contacts"); setCurrentPage(1);}} className="w-full">
+            <NavItem icon={<Mail size={20} />} label="Contacts" active={activeTab === "contacts"} open={sidebarOpen} />
+          </button>
         </nav>
 
+        {/* Sidebar Logout Button */}
         <div className="p-4 border-t border-slate-100">
-            <button 
-              onClick={handleLogout}
-              className="flex items-center gap-3 text-slate-500 hover:text-red-600 hover:bg-red-50 w-full p-2 rounded-lg transition-colors"
-            >
-              <LogOut size={20} />
-              {sidebarOpen && <span className="font-medium text-sm">Sign Out</span>}
-            </button>
+          <button 
+            onClick={handleLogout} 
+            className="flex items-center gap-3 text-slate-500 hover:text-red-600 hover:bg-red-50 w-full p-2.5 rounded-lg transition-all"
+          >
+            <LogOut size={20} />
+            {sidebarOpen && <span className="font-medium text-sm">Sign Out</span>}
+          </button>
         </div>
       </aside>
 
       {/* --- MAIN CONTENT --- */}
       <div className="flex-1 flex flex-col min-w-0">
-        
-        {/* --- TOP BAR --- */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 z-10">
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-slate-500 hover:bg-slate-50 p-2 rounded-md transition-all">
-            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
-
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-slate-500 p-2"><Menu size={20} /></button>
+          
           <div className="flex items-center gap-4">
-            <button className="text-slate-400 hover:text-indigo-600 p-2 relative">
-              <Bell size={20} />
-              <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-            </button>
-
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
-                <button className="flex items-center gap-3 pl-4 border-l border-slate-200 outline-none group">
+                <button className="flex items-center gap-3 outline-none group cursor-pointer">
                   <div className="text-right hidden sm:block">
-                    <p className="text-sm font-bold text-slate-800 leading-none truncate max-w-[120px]">
-                      {session?.user?.name || "Admin User"}
-                    </p>
-                    <p className="text-[10px] text-slate-400 font-medium mt-1 uppercase tracking-widest">
-                      {session?.user?.role || "SUPER ADMIN"}
-                    </p>
+                    <p className="text-sm font-bold text-slate-800 leading-none">{session?.user?.name}</p>
+                    <p className="text-[10px] text-slate-400 font-medium mt-1 uppercase">SUPER ADMIN</p>
                   </div>
-                  <div className="w-9 h-9 rounded-full bg-slate-100 border-2 border-white shadow-sm flex items-center justify-center text-indigo-600 group-data-[state=open]:ring-2 group-data-[state=open]:ring-indigo-100 transition-all">
+                  <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-indigo-600 border border-slate-200 group-hover:border-indigo-300 transition-all">
                     <UserIcon size={20} />
                   </div>
                 </button>
               </DropdownMenu.Trigger>
+
               <DropdownMenu.Portal>
-                <DropdownMenu.Content className="min-w-[200px] bg-white rounded-xl shadow-2xl border border-slate-100 p-1.5 z-50" align="end" sideOffset={10}>
+                <DropdownMenu.Content className="min-w-[160px] bg-white rounded-xl shadow-xl border border-slate-100 p-1.5 z-50 animate-in fade-in zoom-in duration-200" align="end" sideOffset={8}>
                   <DropdownMenu.Item className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600 outline-none rounded-md hover:bg-slate-50 cursor-pointer">
                     <UserCircle size={16} /> Profile
                   </DropdownMenu.Item>
@@ -194,99 +161,87 @@ export default function FullAdminDashboard() {
           </div>
         </header>
 
-        {/* --- TABLE BODY --- */}
         <main className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-6xl mx-auto">
+            {/* ... Content baki waisa hi rahy ga jo apny tab logic banai thi ... */}
             <div className="mb-8">
-              <h1 className="text-2xl font-bold text-slate-800">User Management</h1>
-              <p className="text-slate-500 text-sm">Real-time database records for registered users.</p>
+              <h1 className="text-2xl font-bold text-slate-800">
+                {activeTab === "users" ? "User Management" : "Contact Messages"}
+              </h1>
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="p-4 border-b border-slate-50 bg-slate-50/30">
+               {/* Search & Table Logic ... */}
+               <div className="p-4 border-b border-slate-50 bg-slate-50/30">
                  <div className="relative w-full max-w-xs">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                     <input 
                       type="text" 
-                      placeholder="Search name or email..." 
+                      placeholder={activeTab === "users" ? "Search users..." : "Search messages..."}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none" 
+                      className="w-full pl-10 pr-4 py-2 text-sm border border-slate-200 rounded-lg outline-none" 
                     />
                  </div>
               </div>
-
+              
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
-                  <thead className="bg-slate-50/50 text-slate-500 text-[11px] uppercase tracking-wider font-bold">
-                    <tr>
-                      <th className="px-6 py-4">User Details</th>
-                      <th className="px-6 py-4">Subscription Plan</th>
-                      <th className="px-6 py-4">Status</th>
-                      <th className="px-6 py-4 text-right">Actions</th>
-                    </tr>
+                   <thead className="bg-slate-50/50 text-slate-500 text-[11px] uppercase tracking-wider font-bold">
+                    {activeTab === "users" ? (
+                      <tr>
+                        <th className="px-6 py-4">User Details</th>
+                        <th className="px-6 py-4">Subscription</th>
+                        <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
+                      </tr>
+                    ) : (
+                      <tr>
+                        <th className="px-6 py-4">Sender</th>
+                        <th className="px-6 py-4 w-[40%]">Message</th>
+                        <th className="px-6 py-4">Date</th>
+                      </tr>
+                    )}
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {currentUsers.map((user) => {
-                      const plan = plans.find(p => p.id === user.plan?.toLowerCase()) || plans[0];
-                      const isUserActive = user.status === "active";
-
-                      return (
-                        <tr key={user._id} className="hover:bg-slate-50/40 transition-colors">
+                    {activeTab === "users" ? (
+                      currentItems.map((user) => (
+                        <tr key={user._id} className="hover:bg-slate-50/40">
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-slate-100 text-indigo-600 flex items-center justify-center font-bold text-xs border border-slate-200">
-                                {user.name?.charAt(0) || "U"}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold text-slate-800 truncate">{user.name}</p>
-                                <p className="text-xs text-slate-400 truncate">{user.email}</p>
+                              <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs">{user.name?.charAt(0)}</div>
+                              <div>
+                                <p className="text-sm font-semibold">{user.name}</p>
+                                <p className="text-xs text-slate-400">{user.email}</p>
                               </div>
                             </div>
                           </td>
+                          <td className="px-6 py-4"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 uppercase">{user.plan || "Free"}</span></td>
                           <td className="px-6 py-4">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${plan.color}`}>
-                              {user.plan || "NO PLAN"}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <Circle size={6} fill={isUserActive ? "#10b981" : "#94a3b8"} className={isUserActive ? "text-emerald-500" : "text-slate-400"} />
-                              <span className={`text-xs font-medium ${isUserActive ? 'text-emerald-700' : 'text-slate-500'}`}>
-                                {isUserActive ? "Active" : "Inactive"}
-                              </span>
+                            <div className="flex items-center gap-2 text-xs font-medium">
+                              <Circle size={6} fill={user.status === "active" ? "#10b981" : "#94a3b8"} className={user.status === "active" ? "text-emerald-500" : "text-slate-400"} />
+                              {user.status}
                             </div>
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <button 
-                              onClick={() => toggleStatus(user._id, user.status)}
-                              className={`text-xs font-bold px-3 py-1.5 rounded-md transition-all ${isUserActive ? 'text-red-500 hover:bg-red-50' : 'text-indigo-600 hover:bg-indigo-50'}`}
-                            >
-                              {isUserActive ? 'Disable Account' : 'Enable Account'}
-                            </button>
+                            <button onClick={() => toggleStatus(user._id, user.status)} className="text-xs font-bold text-indigo-600 hover:underline">{user.status === "active" ? 'Disable' : 'Enable'}</button>
                           </td>
                         </tr>
-                      );
-                    })}
+                      ))
+                    ) : (
+                      currentItems.map((msg) => (
+                        <tr key={msg._id} className="hover:bg-slate-50/40">
+                          <td className="px-6 py-4">
+                            <p className="text-sm font-semibold">{msg.firstName} {msg.lastName}</p>
+                            <p className="text-xs text-slate-400">{msg.email}</p>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-slate-600 italic">"{msg.message}"</td>
+                          <td className="px-6 py-4 text-xs text-slate-400">{format(new Date(msg.createdAt), "dd MMM yyyy")}</td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
-              </div>
-
-              {/* PAGINATION */}
-              <div className="px-6 py-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between">
-                <p className="text-xs text-slate-500 font-medium">Page {currentPage} of {totalPages || 1}</p>
-                <div className="flex gap-2">
-                  <button 
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(p => p - 1)}
-                    className="p-1.5 border border-slate-200 rounded-md bg-white disabled:opacity-40 shadow-sm"
-                  ><ChevronLeft size={16} /></button>
-                  <button 
-                    disabled={currentPage === totalPages || totalPages === 0}
-                    onClick={() => setCurrentPage(p => p + 1)}
-                    className="p-1.5 border border-slate-200 rounded-md bg-white disabled:opacity-40 shadow-sm"
-                  ><ChevronRight size={16} /></button>
-                </div>
               </div>
             </div>
           </div>
@@ -295,6 +250,8 @@ export default function FullAdminDashboard() {
     </div>
   );
 }
+
+
 
 function NavItem({ icon, label, active, open }) {
   return (

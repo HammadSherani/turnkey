@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,11 +13,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { CheckCircle } from "lucide-react";
-
-
+import { CheckCircle, Lock } from "lucide-react";
+import { toast } from "sonner";
 
 const ContactModal = ({ children }) => {
+  const { data: session } = useSession();
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -27,29 +28,46 @@ const ContactModal = ({ children }) => {
     message: "",
   });
 
+  // Role check: Sirf Admin access kar sake
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      const response = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
 
-    setIsSubmitting(false);
-    setIsSuccess(true);
-
-    // Reset form after showing success
-    setTimeout(() => {
-      setFormData({ firstName: "", lastName: "", email: "", message: "" });
-    }, 500);
+      if (response.ok) {
+        setIsSuccess(true);
+        setFormData({ firstName: "", lastName: "", email: "", message: "" });
+      }
+    } catch (error) {
+      console.error("Error:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleClose = () => {
     setOpen(false);
-    // Reset success state after modal closes
-    setTimeout(() => {
-      setIsSuccess(false);
-    }, 300);
+    setTimeout(() => setIsSuccess(false), 300);
   };
+
+  // Agar user admin nahi hai, toh trigger button dikhana hi nahi hai ya disabled dikhana hai
+  // if (!isAdmin) {
+  //   return (
+  //     <div className="relative group">
+  //        {children}
+  //        <div className="absolute inset-0 bg-background/50 cursor-not-allowed hidden group-hover:flex items-center justify-center rounded-md">
+  //           <Lock className="h-4 w-4 mr-1" /> <span className="text-[10px]">Admin Only</span>
+  //        </div>
+  //     </div>
+  //   );
+  // }
 
   const isFormValid =
     formData.firstName.trim() &&
@@ -58,16 +76,11 @@ const ContactModal = ({ children }) => {
     formData.message.trim();
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => {
-      if (!isOpen) handleClose();
-      else setOpen(true);
-    }}>
+    <Dialog open={open} onOpenChange={(isOpen) => (!isOpen ? handleClose() : setOpen(true))}>
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-xl font-semibold">
-            Nous contacter
-          </DialogTitle>
+          <DialogTitle className="text-xl font-semibold">Nous contacter</DialogTitle>
         </DialogHeader>
 
         {isSuccess ? (
@@ -76,16 +89,8 @@ const ContactModal = ({ children }) => {
             <h3 className="text-lg font-medium text-foreground mb-2">
               Merci, votre demande a bien été envoyée.
             </h3>
-            <p className="text-muted-foreground">
-              Nous vous recontacterons rapidement.
-            </p>
-            <Button
-              onClick={handleClose}
-              className="mt-6"
-              variant="outline"
-            >
-              Fermer
-            </Button>
+            <p className="text-muted-foreground">Nous vous recontacterons rapidement.</p>
+            <Button onClick={handleClose} className="mt-6" variant="outline">Fermer</Button>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -95,9 +100,7 @@ const ContactModal = ({ children }) => {
                 <Input
                   id="firstName"
                   value={formData.firstName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, firstName: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                   placeholder="Votre prénom"
                   required
                   disabled={isSubmitting}
@@ -108,9 +111,7 @@ const ContactModal = ({ children }) => {
                 <Input
                   id="lastName"
                   value={formData.lastName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, lastName: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                   placeholder="Votre nom"
                   required
                   disabled={isSubmitting}
@@ -124,9 +125,7 @@ const ContactModal = ({ children }) => {
                 id="email"
                 type="email"
                 value={formData.email}
-                onChange={(e) =>
-                  setFormData({ ...formData, email: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="votre@email.com"
                 required
                 disabled={isSubmitting}
@@ -138,9 +137,7 @@ const ContactModal = ({ children }) => {
               <Textarea
                 id="message"
                 value={formData.message}
-                onChange={(e) =>
-                  setFormData({ ...formData, message: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                 placeholder="Décrivez votre demande..."
                 rows={4}
                 required
@@ -148,11 +145,7 @@ const ContactModal = ({ children }) => {
               />
             </div>
 
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={!isFormValid || isSubmitting}
-            >
+            <Button type="submit" className="w-full" disabled={!isFormValid || isSubmitting}>
               {isSubmitting ? "Envoi en cours..." : "Envoyer"}
             </Button>
           </form>
