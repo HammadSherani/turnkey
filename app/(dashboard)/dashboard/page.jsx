@@ -27,7 +27,7 @@ import { plans } from "@/constants/data";
 
 export default function Dashboard() {
   const router = useRouter();
-  const { data: session, status } = useSession();
+  const { data: session, status, update: updateSession } = useSession();
 
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [showSaveFilterModal, setShowSaveFilterModal] = useState(false);
@@ -95,6 +95,7 @@ export default function Dashboard() {
 
       setExtractedData(result.results || []);
       setHasExtracted(true);
+      updateSession();
       toast.success(`${result.results?.length || 0} emails extraits.`);
       await quotas.consumeExtraction();
     } catch (error) {

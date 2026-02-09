@@ -125,7 +125,8 @@ export async function POST(req) {
     return NextResponse.json({
       success: true,
       results,
-      remaining: totalAllowed - (currentUsage + 1) // Dynamic response
+      // remaining: totalAllowed - (currentUsage + 1) // Dynamic response
+      remaining: currentUsage + 1 // Dynamic response
     });
 
   } catch (error) {
