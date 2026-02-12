@@ -12,7 +12,7 @@ export default function SubscriptionStatus({
 }) {
   const getProgressColor = () => {
     if (monthlyUsagePercent >= 10) return "bg-destructive";
-    if (monthlyUsagePercent >= 10) return "bg-yellow-500";
+    if (monthlyUsagePercent >= 30) return "bg-yellow-500";
     return "bg-accent";
   };
 
