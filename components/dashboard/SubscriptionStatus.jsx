@@ -11,11 +11,14 @@ export default function SubscriptionStatus({
   onRefresh,
 }) {
   const getProgressColor = () => {
-    if (monthlyUsagePercent >= 90) return "bg-destructive";
-    if (monthlyUsagePercent >= 70) return "bg-yellow-500";
+    if (monthlyUsagePercent >= 10) return "bg-destructive";
+    if (monthlyUsagePercent >= 10) return "bg-yellow-500";
     return "bg-accent";
   };
 
+
+  console.log("monthlyUsagePercent", monthlyUsagePercent);
+  
   return (
     <div className="bg-card border border-border rounded-lg p-4">
       <div className="flex flex-col md:flex-row md:items-center gap-4">
@@ -43,13 +46,14 @@ export default function SubscriptionStatus({
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Extractions ce mois-ci</span>
             <span className="font-medium">
-              {extractionsUsed?.toLocaleString()} / {extractionsLimit?.toLocaleString()}
+              { extractionsLimit - extractionsUsed  } / {extractionsLimit?.toLocaleString()}
+              {/* {extractionsUsed?.toLocaleString()} / {extractionsLimit?.toLocaleString()} */}
             </span>
           </div>
           <div className="relative h-2 bg-muted rounded-full overflow-hidden">
             <div 
               className={`absolute inset-y-0 left-0 ${getProgressColor()} transition-all duration-300`}
-              style={{ width: `${Math.min(monthlyUsagePercent, 100)}%` }}
+              style={{ width: `${100 - monthlyUsagePercent}%` }}
             />
           </div>
           {/* <p className="text-xs text-muted-foreground">
